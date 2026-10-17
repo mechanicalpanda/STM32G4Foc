@@ -1,0 +1,42 @@
+﻿# ==== Keil MDK-ARM 编译产物 ====
+# 编译输出目录(.o/.crf/.d/.axf/.hex/.map 等全部在此)
+MDK-ARM/*/
+
+# 单独散落的产物
+*.o
+*.crf
+*.d
+*.axf
+*.hex
+*.bin
+*.elf
+*.lst
+*.map
+*.sct
+*.lnp
+*.dep
+*.iex
+*.htm
+*.build_log.htm
+*.__i
+*.bak
+
+# Keil 用户界面/会话状态(每人不同, 不入库)
+*.uvguix.*
+*.uvoptx
+
+# 其它
+codex_build.log
+DebugConfig/
+
+# ==== 保留(不忽略)====
+# 工程文件本身需要入库:
+!MDK-ARM/FOCTEST.uvprojx
+!*.scvd
+!startup_*.s
+
+# ==== 通用 ====
+.worktrees/
+*.log
+Thumbs.db
+.DS_Store
