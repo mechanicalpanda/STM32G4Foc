@@ -22,12 +22,53 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
-
+#include <stdarg.h>
+#include <string.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
+UART_HandleTypeDef huart1;
 
+#define DATA_COUNT_MAX 1
+typedef struct
+{
+    float fdata[DATA_COUNT_MAX];
+    uint8_t tail[4];
+}Vofa_Packet;
+
+Vofa_Packet Vofa_packet;	
+
+void Vofa_Init(Vofa_Packet *frame)
+{
+    frame->tail[0] = 0x00;
+    frame->tail[1] = 0x00;
+    frame->tail[2] = 0x80;
+    frame->tail[3] = 0x7f;
+}
+
+void Vofa_SendFloat(Vofa_Packet *packet)
+ {
+    uint8_t byte[4];
+    uint8_t i;
+    uint32_t temp;
+	  uint8_t data[DATA_COUNT_MAX * 4 + 4] = {0};
+		data[DATA_COUNT_MAX * 4 + 4 - 1] = 0x7f;
+	  data[DATA_COUNT_MAX * 4 + 4 - 2] = 0x80;
+		data[DATA_COUNT_MAX * 4 + 4 - 3] = 0x00;
+		data[DATA_COUNT_MAX * 4 + 4 - 4] = 0x00;
+		
+    for(i=0;i<DATA_COUNT_MAX;i++)
+    {
+        temp = *((uint32_t*)&packet->fdata[i]);  // Reinterpret float as Uint32
+        data[0+i*4] = (uint8_t)(temp);
+        data[1+i*4] = (uint8_t)(temp >> 8);
+        data[2+i*4] = (uint8_t)(temp >> 16);
+        data[3+i*4] = (uint8_t)(temp >> 24);
+			 //HAL_UART_Transmit(&huart1, (const uint8_t *)byte, 4, 0xff);
+    }     
+    HAL_UART_Transmit_DMA(&huart1,data,DATA_COUNT_MAX * 4 + 4);
+ }
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -41,9 +82,10 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
-UART_HandleTypeDef huart1;
-DMA_HandleTypeDef hdma_usart1_tx;
 
+DMA_HandleTypeDef hdma_usart1_tx;
+DMA_HandleTypeDef hdma_usart1_rx;
+uint8_t receive_buff[255];    
 /* USER CODE BEGIN PV */
 
 int fputc(int ch, FILE * f)
@@ -80,7 +122,32 @@ static void MX_USART1_UART_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+void Debug_print(const char* buf, ...)
+{
+  const char *p = buf;
+  char str[255] = {0};
+  va_list v;
+  va_start(v, buf);
+  vsprintf(str, buf, v);
+  HAL_UART_Transmit(&huart1, (const uint8_t *)str, strlen(str), 0xff);
+  va_end(v);
+}
+uint8_t _dbg_Buff[150];
+void printf_DMA(const char *format,...)
+  {
+    uint32_t length;
+    va_list args;
+    uint8_t  temp=0;
 
+    va_start(args, format);
+    length = vsnprintf((char*)_dbg_Buff, sizeof(_dbg_Buff)+1, (char*)format, args);
+    va_end(args);
+
+    HAL_UART_Transmit_DMA(&huart1,_dbg_Buff,length);
+    while(!__HAL_UART_GET_FLAG(&huart1,UART_FLAG_TC));
+  }
+
+float test = 0;
 /* USER CODE END 0 */
 
 /**
@@ -115,7 +182,12 @@ int main(void)
   MX_DMA_Init();
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
-
+  __HAL_UART_ENABLE_IT(&huart1, UART_IT_IDLE);
+	HAL_UART_Receive_DMA(&huart1, (uint8_t*)receive_buff, 255); 
+	Vofa_Init(&Vofa_packet);
+	
+	uint8_t _dbg_Buff[150];
+  
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -125,9 +197,16 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-		HAL_Delay(1000);
-		//printf("TEST \r\n");
-		HAL_UART_Transmit_DMA(&huart1, (const uint8_t *)"TEST", 5);
+		HAL_Delay(1);
+		test = test + 0.01;
+		if(test > 10.0)
+			test = 0;
+		Vofa_packet.fdata[0] = test;
+		Vofa_SendFloat(&Vofa_packet);
+		
+		//HAL_Delay(1000);
+		//printf_DMA("TEST \r\n");
+		//HAL_UART_Transmit_DMA(&huart1, (const uint8_t *)"TEST", 5);
   }
   /* USER CODE END 3 */
 }
@@ -239,6 +318,9 @@ static void MX_DMA_Init(void)
   /* DMA1_Channel1_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel1_IRQn);
+  /* DMA1_Channel2_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel2_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel2_IRQn);
 
 }
 

@@ -22,6 +22,8 @@
 #include "stm32g4xx_it.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include <stdio.h>
+#include <string.h> 
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -56,8 +58,41 @@
 
 /* External variables --------------------------------------------------------*/
 extern DMA_HandleTypeDef hdma_usart1_tx;
+extern DMA_HandleTypeDef hdma_usart1_rx;
 extern UART_HandleTypeDef huart1;
 /* USER CODE BEGIN EV */
+extern void Debug_print(const char* buf, ...);
+extern void printf_DMA(const char *format,...);
+#define  BUFFER_SIZE  (255)
+extern uint8_t receive_buff[255];                                                
+void USAR_UART_IDLECallback(UART_HandleTypeDef *huart)
+{
+    HAL_UART_DMAStop(&huart1);                                                     
+    
+    uint8_t data_length  = BUFFER_SIZE - __HAL_DMA_GET_COUNTER(&hdma_usart1_rx);   
+
+    printf_DMA("Receive Data(length = %d): ",data_length);
+    HAL_UART_Transmit(&huart1,receive_buff,data_length,0x200);                     
+    printf_DMA("\r\n");
+
+    memset(receive_buff,0,data_length);  
+	
+    data_length = 0;
+    HAL_UART_Receive_DMA(&huart1, (uint8_t*)receive_buff, 255);                    
+}
+
+void USER_UART_IRQHandler(UART_HandleTypeDef *huart)
+{
+    if(USART1 == huart1.Instance)                                  
+    {
+        if(RESET != __HAL_UART_GET_FLAG(&huart1, UART_FLAG_IDLE))   
+        {
+            __HAL_UART_CLEAR_IDLEFLAG(&huart1);                     
+            printf_DMA("\r\nUART1 Idle IQR Detected\r\n");
+            USAR_UART_IDLECallback(huart);                          
+        }
+    }
+}
 
 /* USER CODE END EV */
 
@@ -214,6 +249,20 @@ void DMA1_Channel1_IRQHandler(void)
 }
 
 /**
+  * @brief This function handles DMA1 channel2 global interrupt.
+  */
+void DMA1_Channel2_IRQHandler(void)
+{
+  /* USER CODE BEGIN DMA1_Channel2_IRQn 0 */
+
+  /* USER CODE END DMA1_Channel2_IRQn 0 */
+  HAL_DMA_IRQHandler(&hdma_usart1_rx);
+  /* USER CODE BEGIN DMA1_Channel2_IRQn 1 */
+
+  /* USER CODE END DMA1_Channel2_IRQn 1 */
+}
+
+/**
   * @brief This function handles USART1 global interrupt / USART1 wake-up interrupt through EXTI line 25.
   */
 void USART1_IRQHandler(void)
@@ -223,7 +272,7 @@ void USART1_IRQHandler(void)
   /* USER CODE END USART1_IRQn 0 */
   HAL_UART_IRQHandler(&huart1);
   /* USER CODE BEGIN USART1_IRQn 1 */
-
+  USER_UART_IRQHandler(&huart1);      
   /* USER CODE END USART1_IRQn 1 */
 }
 
