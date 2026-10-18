@@ -57,6 +57,9 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
+#define CKTIM 160000000
+#define PWM_PRSC 0
+#define PWM_FREQ 30000
 #define KEY0_Pin GPIO_PIN_12
 #define KEY0_GPIO_Port GPIOE
 #define KEY0_EXTI_IRQn EXTI15_10_IRQn
