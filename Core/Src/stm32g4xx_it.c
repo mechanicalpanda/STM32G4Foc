@@ -57,6 +57,8 @@
 /* USER CODE END 0 */
 
 /* External variables --------------------------------------------------------*/
+extern ADC_HandleTypeDef hadc1;
+extern TIM_HandleTypeDef htim1;
 extern DMA_HandleTypeDef hdma_usart1_tx;
 extern DMA_HandleTypeDef hdma_usart1_rx;
 extern UART_HandleTypeDef huart1;
@@ -64,36 +66,23 @@ extern UART_HandleTypeDef huart1;
 extern void Debug_print(const char* buf, ...);
 extern void printf_DMA(const char *format,...);
 #define  BUFFER_SIZE  (255)
-extern uint8_t receive_buff[255];                                                
+extern uint8_t receive_buff[256];
+/* Do not stop TX DMA or print text into the VOFA binary stream. */
 void USAR_UART_IDLECallback(UART_HandleTypeDef *huart)
 {
-    HAL_UART_DMAStop(&huart1);                                                     
-    
-    uint8_t data_length  = BUFFER_SIZE - __HAL_DMA_GET_COUNTER(&hdma_usart1_rx);   
-
-    printf_DMA("Receive Data(length = %d): ",data_length);
-    HAL_UART_Transmit(&huart1,receive_buff,data_length,0x200);                     
-    printf_DMA("\r\n");
-
-    memset(receive_buff,0,data_length);  
-	
-    data_length = 0;
-    HAL_UART_Receive_DMA(&huart1, (uint8_t*)receive_buff, 255);                    
+    (void)HAL_UART_AbortReceive(huart);
+    (void)HAL_UART_Receive_DMA(huart, receive_buff, BUFFER_SIZE);
 }
 
 void USER_UART_IRQHandler(UART_HandleTypeDef *huart)
 {
-    if(USART1 == huart1.Instance)                                  
+    if ((huart->Instance == USART1) &&
+        (__HAL_UART_GET_FLAG(huart, UART_FLAG_IDLE) != RESET))
     {
-        if(RESET != __HAL_UART_GET_FLAG(&huart1, UART_FLAG_IDLE))   
-        {
-            __HAL_UART_CLEAR_IDLEFLAG(&huart1);                     
-            printf_DMA("\r\nUART1 Idle IQR Detected\r\n");
-            USAR_UART_IDLECallback(huart);                          
-        }
+        __HAL_UART_CLEAR_IDLEFLAG(huart);
+        USAR_UART_IDLECallback(huart);
     }
 }
-
 /* USER CODE END EV */
 
 /******************************************************************************/
@@ -260,6 +249,34 @@ void DMA1_Channel2_IRQHandler(void)
   /* USER CODE BEGIN DMA1_Channel2_IRQn 1 */
 
   /* USER CODE END DMA1_Channel2_IRQn 1 */
+}
+
+/**
+  * @brief This function handles ADC1 and ADC2 global interrupt.
+  */
+//void ADC1_2_IRQHandler(void)
+//{
+//  /* USER CODE BEGIN ADC1_2_IRQn 0 */
+
+//  /* USER CODE END ADC1_2_IRQn 0 */
+//  HAL_ADC_IRQHandler(&hadc1);
+//  /* USER CODE BEGIN ADC1_2_IRQn 1 */
+
+//  /* USER CODE END ADC1_2_IRQn 1 */
+//}
+
+/**
+  * @brief This function handles TIM1 update interrupt and TIM16 global interrupt.
+  */
+void TIM1_UP_TIM16_IRQHandler(void)
+{
+  /* USER CODE BEGIN TIM1_UP_TIM16_IRQn 0 */
+
+  /* USER CODE END TIM1_UP_TIM16_IRQn 0 */
+  HAL_TIM_IRQHandler(&htim1);
+  /* USER CODE BEGIN TIM1_UP_TIM16_IRQn 1 */
+
+  /* USER CODE END TIM1_UP_TIM16_IRQn 1 */
 }
 
 /**

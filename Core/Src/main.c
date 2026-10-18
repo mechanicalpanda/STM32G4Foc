@@ -24,13 +24,14 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
+#include "Timer.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
 UART_HandleTypeDef huart1;
-
-#define DATA_COUNT_MAX 1
+uint8_t receive_buff[256] = {0};
+#define DATA_COUNT_MAX 3
 typedef struct
 {
     float fdata[DATA_COUNT_MAX];
@@ -47,28 +48,18 @@ void Vofa_Init(Vofa_Packet *frame)
     frame->tail[3] = 0x7f;
 }
 
+/* Called from the main loop only. DMA owns data until TX completes. */
 void Vofa_SendFloat(Vofa_Packet *packet)
- {
-    uint8_t byte[4];
-    uint8_t i;
-    uint32_t temp;
-	  uint8_t data[DATA_COUNT_MAX * 4 + 4] = {0};
-		data[DATA_COUNT_MAX * 4 + 4 - 1] = 0x7f;
-	  data[DATA_COUNT_MAX * 4 + 4 - 2] = 0x80;
-		data[DATA_COUNT_MAX * 4 + 4 - 3] = 0x00;
-		data[DATA_COUNT_MAX * 4 + 4 - 4] = 0x00;
-		
-    for(i=0;i<DATA_COUNT_MAX;i++)
+{
+    static uint8_t data[DATA_COUNT_MAX * 4 + 4];
+    if ((packet == NULL) || (huart1.gState != HAL_UART_STATE_READY))
     {
-        temp = *((uint32_t*)&packet->fdata[i]);  // Reinterpret float as Uint32
-        data[0+i*4] = (uint8_t)(temp);
-        data[1+i*4] = (uint8_t)(temp >> 8);
-        data[2+i*4] = (uint8_t)(temp >> 16);
-        data[3+i*4] = (uint8_t)(temp >> 24);
-			 //HAL_UART_Transmit(&huart1, (const uint8_t *)byte, 4, 0xff);
-    }     
-    HAL_UART_Transmit_DMA(&huart1,data,DATA_COUNT_MAX * 4 + 4);
- }
+        return;
+    }
+    memcpy(data, packet->fdata, DATA_COUNT_MAX * sizeof(float));
+    memcpy(&data[DATA_COUNT_MAX * sizeof(float)], packet->tail, 4U);
+    (void)HAL_UART_Transmit_DMA(&huart1, data, sizeof(data));
+}
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -82,15 +73,19 @@ void Vofa_SendFloat(Vofa_Packet *packet)
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+ADC_HandleTypeDef hadc1;
 
+TIM_HandleTypeDef htim1;
+
+UART_HandleTypeDef huart1;
 DMA_HandleTypeDef hdma_usart1_tx;
 DMA_HandleTypeDef hdma_usart1_rx;
-uint8_t receive_buff[255];    
+
 /* USER CODE BEGIN PV */
 
 int fputc(int ch, FILE * f)
 {
-	HAL_UART_Transmit_DMA(&huart1, (uint8_t*)&ch, 1);
+	HAL_UART_Transmit(&huart1, (uint8_t*)&ch, 1U, 100U);
 	return ch;
 }
 
@@ -116,6 +111,8 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_DMA_Init(void);
 static void MX_USART1_UART_Init(void);
+static void MX_ADC1_Init(void);
+static void MX_TIM1_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -128,26 +125,33 @@ void Debug_print(const char* buf, ...)
   char str[255] = {0};
   va_list v;
   va_start(v, buf);
-  vsprintf(str, buf, v);
+  vsnprintf(str, sizeof(str), buf, v);
   HAL_UART_Transmit(&huart1, (const uint8_t *)str, strlen(str), 0xff);
   va_end(v);
 }
-uint8_t _dbg_Buff[150];
-void printf_DMA(const char *format,...)
-  {
-    uint32_t length;
+/* Text logging is blocking and must only be used outside interrupts.
+ * Do not use text logging while streaming binary VOFA packets.
+ */
+void printf_DMA(const char *format, ...)
+{
+    char text[150];
+    int length;
     va_list args;
-    uint8_t  temp=0;
-
     va_start(args, format);
-    length = vsnprintf((char*)_dbg_Buff, sizeof(_dbg_Buff)+1, (char*)format, args);
+    length = vsnprintf(text, sizeof(text), format, args);
     va_end(args);
+    if (length <= 0) return;
+    if (length >= (int)sizeof(text)) length = (int)sizeof(text) - 1;
+    (void)HAL_UART_Transmit(&huart1, (uint8_t *)text, (uint16_t)length, 100U);
+}
 
-    HAL_UART_Transmit_DMA(&huart1,_dbg_Buff,length);
-    while(!__HAL_UART_GET_FLAG(&huart1,UART_FLAG_TC));
-  }
-
-float test = 0;
+/* Watch these globals in the debugger. VREF+ is assumed to be 3.3 V. */
+volatile uint16_t AdcRaw[3] = {0U};
+volatile float Adcdata[3] = {0.0f};
+volatile uint32_t datacount = 0U;
+/* 0: not attempted, 1: HAL_OK, 2: HAL_ERROR, 3: HAL_BUSY, 4: HAL_TIMEOUT */
+volatile uint32_t adc_init_status = 0U;
+volatile uint32_t adc_start_status = 0U;
 /* USER CODE END 0 */
 
 /**
@@ -158,7 +162,8 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-
+  ADC_InjectedSample_t sample;
+  uint32_t last_sequence = 0U;
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -181,13 +186,23 @@ int main(void)
   MX_GPIO_Init();
   MX_DMA_Init();
   MX_USART1_UART_Init();
+  /* ADC1 is initialized by ADC_Injected_Init(). */
+  /* TIM1 is initialized by ADC_Injected_Init(). */
   /* USER CODE BEGIN 2 */
   __HAL_UART_ENABLE_IT(&huart1, UART_IT_IDLE);
-	HAL_UART_Receive_DMA(&huart1, (uint8_t*)receive_buff, 255); 
-	Vofa_Init(&Vofa_packet);
-	
-	uint8_t _dbg_Buff[150];
-  
+  HAL_UART_Receive_DMA(&huart1, receive_buff, 255U);
+  Vofa_Init(&Vofa_packet);
+
+  adc_init_status = (uint32_t)ADC_Injected_Init() + 1U;
+  if (adc_init_status != 1U)
+  {
+      Error_Handler();
+  }
+  adc_start_status = (uint32_t)ADC_Injected_Start() + 1U;
+  if (adc_start_status != 1U)
+  {
+      Error_Handler();
+  }
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -197,16 +212,25 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-		HAL_Delay(1);
-		test = test + 0.01;
-		if(test > 10.0)
-			test = 0;
-		Vofa_packet.fdata[0] = test;
-		Vofa_SendFloat(&Vofa_packet);
-		
-		//HAL_Delay(1000);
-		//printf_DMA("TEST \r\n");
-		//HAL_UART_Transmit_DMA(&huart1, (const uint8_t *)"TEST", 5);
+    HAL_Delay(10U);
+    if (ADC_Injected_GetLatest(&sample) != 0U)
+    {
+        if (sample.sequence != last_sequence)
+        {
+            last_sequence = sample.sequence;
+            datacount = sample.sequence;
+            AdcRaw[0] = sample.ch7;
+            AdcRaw[1] = sample.ch8;
+            AdcRaw[2] = sample.ch9;
+            Adcdata[0] = sample.ch7 * (3.3f / 4095.0f);
+            Adcdata[1] = sample.ch8 * (3.3f / 4095.0f);
+            Adcdata[2] = sample.ch9 * (3.3f / 4095.0f);
+            Vofa_packet.fdata[0] = Adcdata[0];
+            Vofa_packet.fdata[1] = Adcdata[1];
+            Vofa_packet.fdata[2] = Adcdata[2];
+            Vofa_SendFloat(&Vofa_packet);
+        }
+    }
   }
   /* USER CODE END 3 */
 }
@@ -254,6 +278,178 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+}
+
+/**
+  * @brief ADC1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_ADC1_Init(void)
+{
+
+  /* USER CODE BEGIN ADC1_Init 0 */
+
+  /* USER CODE END ADC1_Init 0 */
+
+  ADC_MultiModeTypeDef multimode = {0};
+  ADC_InjectionConfTypeDef sConfigInjected = {0};
+
+  /* USER CODE BEGIN ADC1_Init 1 */
+
+  /* USER CODE END ADC1_Init 1 */
+
+  /** Common config
+  */
+  hadc1.Instance = ADC1;
+  hadc1.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;
+  hadc1.Init.Resolution = ADC_RESOLUTION_12B;
+  hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
+  hadc1.Init.GainCompensation = 0;
+  hadc1.Init.ScanConvMode = ADC_SCAN_ENABLE;
+  hadc1.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
+  hadc1.Init.LowPowerAutoWait = DISABLE;
+  hadc1.Init.ContinuousConvMode = DISABLE;
+  hadc1.Init.NbrOfConversion = 1;
+  hadc1.Init.DiscontinuousConvMode = DISABLE;
+  hadc1.Init.DMAContinuousRequests = DISABLE;
+  hadc1.Init.Overrun = ADC_OVR_DATA_PRESERVED;
+  hadc1.Init.OversamplingMode = DISABLE;
+  if (HAL_ADC_Init(&hadc1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure the ADC multi-mode
+  */
+  multimode.Mode = ADC_MODE_INDEPENDENT;
+  if (HAL_ADCEx_MultiModeConfigChannel(&hadc1, &multimode) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Injected Channel
+  */
+  sConfigInjected.InjectedChannel = ADC_CHANNEL_7;
+  sConfigInjected.InjectedRank = ADC_INJECTED_RANK_1;
+  sConfigInjected.InjectedSamplingTime = ADC_SAMPLETIME_12CYCLES_5;
+  sConfigInjected.InjectedSingleDiff = ADC_SINGLE_ENDED;
+  sConfigInjected.InjectedOffsetNumber = ADC_OFFSET_NONE;
+  sConfigInjected.InjectedOffset = 0;
+  sConfigInjected.InjectedNbrOfConversion = 3;
+  sConfigInjected.InjectedDiscontinuousConvMode = DISABLE;
+  sConfigInjected.AutoInjectedConv = DISABLE;
+  sConfigInjected.QueueInjectedContext = DISABLE;
+  sConfigInjected.ExternalTrigInjecConv = ADC_EXTERNALTRIGINJEC_T1_CC4;
+  sConfigInjected.ExternalTrigInjecConvEdge = ADC_EXTERNALTRIGINJECCONV_EDGE_RISING;
+  sConfigInjected.InjecOversamplingMode = DISABLE;
+  if (HAL_ADCEx_InjectedConfigChannel(&hadc1, &sConfigInjected) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Injected Channel
+  */
+  sConfigInjected.InjectedChannel = ADC_CHANNEL_8;
+  sConfigInjected.InjectedRank = ADC_INJECTED_RANK_2;
+  if (HAL_ADCEx_InjectedConfigChannel(&hadc1, &sConfigInjected) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Injected Channel
+  */
+  sConfigInjected.InjectedChannel = ADC_CHANNEL_9;
+  sConfigInjected.InjectedRank = ADC_INJECTED_RANK_3;
+  if (HAL_ADCEx_InjectedConfigChannel(&hadc1, &sConfigInjected) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN ADC1_Init 2 */
+
+  /* USER CODE END ADC1_Init 2 */
+
+}
+
+/**
+  * @brief TIM1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM1_Init(void)
+{
+
+  /* USER CODE BEGIN TIM1_Init 0 */
+
+  /* USER CODE END TIM1_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_OC_InitTypeDef sConfigOC = {0};
+  TIM_BreakDeadTimeConfigTypeDef sBreakDeadTimeConfig = {0};
+
+  /* USER CODE BEGIN TIM1_Init 1 */
+
+  /* USER CODE END TIM1_Init 1 */
+  htim1.Instance = TIM1;
+  htim1.Init.Prescaler = 0;
+  htim1.Init.CounterMode = TIM_COUNTERMODE_CENTERALIGNED1;
+  htim1.Init.Period = 5000;
+  htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim1.Init.RepetitionCounter = 0;
+  htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim1, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_OC_Init(&htim1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterOutputTrigger2 = TIM_TRGO2_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigOC.OCMode = TIM_OCMODE_TIMING;
+  sConfigOC.Pulse = 0;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  sConfigOC.OCIdleState = TIM_OCIDLESTATE_RESET;
+  sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_RESET;
+  if (HAL_TIM_OC_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_4) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sBreakDeadTimeConfig.OffStateRunMode = TIM_OSSR_DISABLE;
+  sBreakDeadTimeConfig.OffStateIDLEMode = TIM_OSSI_DISABLE;
+  sBreakDeadTimeConfig.LockLevel = TIM_LOCKLEVEL_OFF;
+  sBreakDeadTimeConfig.DeadTime = 0;
+  sBreakDeadTimeConfig.BreakState = TIM_BREAK_DISABLE;
+  sBreakDeadTimeConfig.BreakPolarity = TIM_BREAKPOLARITY_HIGH;
+  sBreakDeadTimeConfig.BreakFilter = 0;
+  sBreakDeadTimeConfig.BreakAFMode = TIM_BREAK_AFMODE_INPUT;
+  sBreakDeadTimeConfig.Break2State = TIM_BREAK2_DISABLE;
+  sBreakDeadTimeConfig.Break2Polarity = TIM_BREAK2POLARITY_HIGH;
+  sBreakDeadTimeConfig.Break2Filter = 0;
+  sBreakDeadTimeConfig.Break2AFMode = TIM_BREAK_AFMODE_INPUT;
+  sBreakDeadTimeConfig.AutomaticOutput = TIM_AUTOMATICOUTPUT_DISABLE;
+  if (HAL_TIMEx_ConfigBreakDeadTime(&htim1, &sBreakDeadTimeConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM1_Init 2 */
+
+  /* USER CODE END TIM1_Init 2 */
+
 }
 
 /**
