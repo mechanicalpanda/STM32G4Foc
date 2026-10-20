@@ -25,7 +25,7 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
 {
     if (hadc->Instance == ADC1)
     {
-			 //HAL_GPIO_TogglePin(LED0_GPIO_Port,LED0_Pin);
+			 HAL_GPIO_TogglePin(LED0_GPIO_Port,LED0_Pin);
         adc_raw[0] = (uint16_t)HAL_ADCEx_InjectedGetValue(
             hadc, ADC_INJECTED_RANK_1);
 
@@ -118,6 +118,10 @@ HAL_StatusTypeDef ADC_TestStart(void)
         return status;
     }
 
+    /* Configure phases while TIM1 is stopped; keep all six outputs LOW. */
+    status = TIM1_ThreePhase_Init();
+    if (status != HAL_OK) return status;
+
     /* 三路注入序列全部完成后产生一次中断。 */
     hadc1.Init.EOCSelection = ADC_EOC_SEQ_CONV;
 
@@ -209,4 +213,174 @@ HAL_StatusTypeDef ADC_TestStart(void)
 
     adc_test_stage = 4U;
     return HAL_OK;
+}
+
+/* TIM1 three-phase complementary PWM, sharing the ADC trigger timer. */
+#define PHASE_ENABLE_MASK (TIM_CCER_CC1E | TIM_CCER_CC1NE | \
+                           TIM_CCER_CC2E | TIM_CCER_CC2NE | \
+                           TIM_CCER_CC3E | TIM_CCER_CC3NE)
+static uint8_t s_initialized = 0U;
+volatile uint32_t tim1_pwm_running = 0U;
+
+static void PhasePinsLow(void)
+{
+    GPIO_InitTypeDef gpio = {0};
+    __HAL_RCC_GPIOA_CLK_ENABLE();
+    __HAL_RCC_GPIOB_CLK_ENABLE();
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8 | GPIO_PIN_9 | GPIO_PIN_10, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13 | GPIO_PIN_14 | GPIO_PIN_15, GPIO_PIN_RESET);
+    gpio.Mode = GPIO_MODE_OUTPUT_PP;
+    gpio.Pull = GPIO_PULLDOWN;
+    gpio.Speed = GPIO_SPEED_FREQ_HIGH;
+    gpio.Pin = GPIO_PIN_8 | GPIO_PIN_9 | GPIO_PIN_10;
+    HAL_GPIO_Init(GPIOA, &gpio);
+    gpio.Pin = GPIO_PIN_13 | GPIO_PIN_14 | GPIO_PIN_15;
+    HAL_GPIO_Init(GPIOB, &gpio);
+}
+
+static void PhasePinsAF(void)
+{
+    GPIO_InitTypeDef gpio = {0};
+    gpio.Mode = GPIO_MODE_AF_PP;
+    gpio.Pull = GPIO_PULLDOWN;
+    gpio.Speed = GPIO_SPEED_FREQ_HIGH;
+    gpio.Alternate = GPIO_AF6_TIM1;
+    gpio.Pin = GPIO_PIN_8 | GPIO_PIN_9 | GPIO_PIN_10;
+    HAL_GPIO_Init(GPIOA, &gpio);
+    gpio.Pin = GPIO_PIN_13 | GPIO_PIN_14;
+    HAL_GPIO_Init(GPIOB, &gpio);
+    /* STM32G474 PB15 uses AF4, unlike PB13/PB14. */
+    gpio.Alternate = GPIO_AF4_TIM1;
+    gpio.Pin = GPIO_PIN_15;
+    HAL_GPIO_Init(GPIOB, &gpio);
+}
+
+HAL_StatusTypeDef TIM1_ThreePhase_Init(void)
+{
+    TIM_OC_InitTypeDef oc = {0};
+    TIM_BreakDeadTimeConfigTypeDef bd = {0};
+    const uint32_t channels[3] = {TIM_CHANNEL_1, TIM_CHANNEL_2, TIM_CHANNEL_3};
+    uint32_t i;
+    HAL_StatusTypeDef status;
+
+    if ((htim1.Instance != TIM1) ||
+        (HAL_RCC_GetPCLK2Freq() != 160000000UL) ||
+        (HAL_RCC_GetHCLKFreq() != 160000000UL) ||
+        (TIM1->PSC != 0U) || (TIM1->ARR != TIM1_PWM_PERIOD_TICKS) ||
+        ((TIM1->CR1 & TIM_CR1_CKD) != 0U) ||
+        ((TIM1->CR1 & TIM_CR1_CMS) != TIM_COUNTERMODE_CENTERALIGNED1) ||
+        ((TIM1->CR1 & TIM_CR1_CEN) != 0U) ||
+        ((TIM1->BDTR & TIM_BDTR_LOCK) != 0U))
+    {
+        return HAL_ERROR;
+    }
+
+    PhasePinsLow();
+    CLEAR_BIT(TIM1->CCER, PHASE_ENABLE_MASK);
+    /* Use direct CCER enables, not commutation-event preloading. */
+    CLEAR_BIT(TIM1->CR2, TIM_CR2_CCPC);
+    s_initialized = 0U;
+    tim1_pwm_running = 0U;
+
+    oc.OCMode = TIM_OCMODE_PWM1;
+    oc.Pulse = TIM1_PWM_PERIOD_TICKS / 2U;
+    oc.OCPolarity = TIM_OCPOLARITY_HIGH;
+    oc.OCNPolarity = TIM_OCNPOLARITY_HIGH;
+    oc.OCFastMode = TIM_OCFAST_DISABLE;
+    oc.OCIdleState = TIM_OCIDLESTATE_RESET;
+    oc.OCNIdleState = TIM_OCNIDLESTATE_RESET;
+    for (i = 0U; i < 3U; i++)
+    {
+        status = HAL_TIM_PWM_ConfigChannel(&htim1, &oc, channels[i]);
+        if (status != HAL_OK) return status;
+        __HAL_TIM_ENABLE_OCxPRELOAD(&htim1, channels[i]);
+    }
+
+    bd.OffStateRunMode = TIM_OSSR_ENABLE;
+    bd.OffStateIDLEMode = TIM_OSSI_ENABLE;
+    bd.LockLevel = TIM_LOCKLEVEL_OFF;
+    bd.DeadTime = TIM1_PWM_DEADTIME_DTG;
+    bd.BreakState = TIM_BREAK_DISABLE;
+    bd.BreakPolarity = TIM_BREAKPOLARITY_HIGH;
+    bd.BreakFilter = 0U;
+    bd.BreakAFMode = TIM_BREAK_AFMODE_INPUT;
+    bd.Break2State = TIM_BREAK2_DISABLE;
+    bd.Break2Polarity = TIM_BREAK2POLARITY_HIGH;
+    bd.Break2Filter = 0U;
+    bd.Break2AFMode = TIM_BREAK_AFMODE_INPUT;
+    bd.AutomaticOutput = TIM_AUTOMATICOUTPUT_DISABLE;
+    status = HAL_TIMEx_ConfigBreakDeadTime(&htim1, &bd);
+    if (status != HAL_OK) return status;
+
+    /* Load initial compares before ADC is armed. Never issue UG at runtime. */
+    TIM1->EGR = TIM_EGR_UG;
+    __HAL_TIM_CLEAR_FLAG(&htim1, TIM_FLAG_UPDATE | TIM_FLAG_CC1 |
+                       TIM_FLAG_CC2 | TIM_FLAG_CC3 | TIM_FLAG_CC4);
+    s_initialized = 1U;
+    return HAL_OK;
+}
+
+HAL_StatusTypeDef TIM1_ThreePhase_Start(void)
+{
+    if ((s_initialized == 0U) || ((TIM1->CR1 & TIM_CR1_CEN) == 0U) ||
+        ((TIM1->CCER & TIM_CCER_CC4E) == 0U)) return HAL_ERROR;
+    if (tim1_pwm_running != 0U) return HAL_OK;
+
+    /* All three complementary pairs enabled by one register write.
+     * Keep CH4, the timer counter and the ADC trigger running.
+     */
+    SET_BIT(TIM1->CCER, PHASE_ENABLE_MASK);
+    __HAL_TIM_MOE_ENABLE(&htim1);
+    PhasePinsAF();
+    tim1_pwm_running = 1U;
+    return HAL_OK;
+}
+
+void TIM1_ThreePhase_Stop(void)
+{
+    if (htim1.Instance == TIM1)
+    {
+        CLEAR_BIT(TIM1->CCER, PHASE_ENABLE_MASK);
+        PhasePinsLow();
+    }
+    tim1_pwm_running = 0U;
+}
+
+HAL_StatusTypeDef TIM1_ThreePhase_SetCompare(uint16_t u, uint16_t v, uint16_t w)
+{
+    uint32_t saved_udis;
+    if ((s_initialized == 0U) || (u > TIM1_PWM_PERIOD_TICKS) ||
+        (v > TIM1_PWM_PERIOD_TICKS) || (w > TIM1_PWM_PERIOD_TICKS)) return HAL_ERROR;
+    saved_udis = TIM1->CR1 & TIM_CR1_UDIS;
+    /* Prevent an update from loading only part of this three-phase command. */
+    SET_BIT(TIM1->CR1, TIM_CR1_UDIS);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, u);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, v);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, w);
+    if (saved_udis == 0U) CLEAR_BIT(TIM1->CR1, TIM_CR1_UDIS);
+    return HAL_OK;
+}
+
+volatile TIM1_PWM_Debug_t tim1_pwm_debug;
+volatile HAL_StatusTypeDef pwm_compare_status = (HAL_StatusTypeDef)0xFF;
+volatile HAL_StatusTypeDef pwm_start_status = (HAL_StatusTypeDef)0xFF;
+
+void TIM1_ThreePhase_DebugRead(void)
+{
+    tim1_pwm_debug.cr1 = TIM1->CR1;
+    tim1_pwm_debug.cr2 = TIM1->CR2;
+    tim1_pwm_debug.ccer = TIM1->CCER;
+    tim1_pwm_debug.ccmr1 = TIM1->CCMR1;
+    tim1_pwm_debug.ccmr2 = TIM1->CCMR2;
+    tim1_pwm_debug.bdtr = TIM1->BDTR;
+    tim1_pwm_debug.cnt = TIM1->CNT;
+    tim1_pwm_debug.arr = TIM1->ARR;
+    tim1_pwm_debug.ccr1 = TIM1->CCR1;
+    tim1_pwm_debug.ccr2 = TIM1->CCR2;
+    tim1_pwm_debug.ccr3 = TIM1->CCR3;
+    tim1_pwm_debug.ccr4 = TIM1->CCR4;
+    tim1_pwm_debug.gpioa_moder = GPIOA->MODER;
+    tim1_pwm_debug.gpioa_afrh = GPIOA->AFR[1];
+    tim1_pwm_debug.gpiob_moder = GPIOB->MODER;
+    tim1_pwm_debug.gpiob_afrh = GPIOB->AFR[1];
 }

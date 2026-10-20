@@ -25,6 +25,41 @@ extern volatile uint32_t adc_test_error;
  */
 HAL_StatusTypeDef ADC_TestStart(void);
 
+/* Three-phase PWM API (same TIM1 as ADC triggering). */
+#define TIM1_PWM_PERIOD_TICKS  5000U
+#define TIM1_PWM_DEADTIME_DTG  96U /* 600 ns at TIM1=160MHz, CKD=DIV1 */
+extern volatile uint32_t tim1_pwm_running;
+
+/* Invoked inside ADC_TestStart(), while TIM1 is stopped.
+ * Does not reinitialize the timer base, CH4 or TRGO.
+ * CH1/2/3: PA8/PA9/PA10 AF6; CH1N/2N: PB13/PB14 AF6;
+ * CH3N: PB15 AF4. Both driver inputs are active HIGH.
+ * Initialization leaves all six pins driven LOW, phase outputs disabled.
+ */
+HAL_StatusTypeDef TIM1_ThreePhase_Init(void);
+/* Call from main after ADC_TestStart succeeds. No automatic power enable. */
+HAL_StatusTypeDef TIM1_ThreePhase_Start(void);
+/* Disables phase outputs and drives pins LOW; CH4/ADC keep running.
+ * This is a software stop, not a hardware overcurrent protection function.
+ */
+void TIM1_ThreePhase_Stop(void);
+/* Call SetCompare only from the ADC ISR; no global interrupt masking is used.
+ * Raw compare counts 0..5000, transferred together on a natural update.
+ * Do not call HAL_TIM_PWM_Start/Stop on CH1-3 separately from this module.
+ */
+HAL_StatusTypeDef TIM1_ThreePhase_SetCompare(uint16_t u, uint16_t v, uint16_t w);
+
+/* Live register snapshots for Watch. Capture while the program is running. */
+typedef struct
+{
+    uint32_t cr1, cr2, ccer, ccmr1, ccmr2, bdtr;
+    uint32_t cnt, arr, ccr1, ccr2, ccr3, ccr4;
+    uint32_t gpioa_moder, gpioa_afrh, gpiob_moder, gpiob_afrh;
+} TIM1_PWM_Debug_t;
+extern volatile TIM1_PWM_Debug_t tim1_pwm_debug;
+extern volatile HAL_StatusTypeDef pwm_compare_status;
+extern volatile HAL_StatusTypeDef pwm_start_status;
+void TIM1_ThreePhase_DebugRead(void);
 #ifdef __cplusplus
 }
 #endif

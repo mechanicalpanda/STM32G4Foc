@@ -35,7 +35,7 @@ TIM_HandleTypeDef htim1;
 uint8_t receive_buff[256] = {0};
 UART_HandleTypeDef huart1;
 
-#define DATA_COUNT_MAX 1
+#define DATA_COUNT_MAX 3
 typedef struct
 {
     float fdata[DATA_COUNT_MAX];
@@ -87,7 +87,9 @@ void Vofa_SendFloat(Vofa_Packet *packet)
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+ADC_HandleTypeDef hadc1;
 
+TIM_HandleTypeDef htim1;
 
 UART_HandleTypeDef huart1;
 DMA_HandleTypeDef hdma_usart1_tx;
@@ -123,10 +125,8 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_DMA_Init(void);
 static void MX_USART1_UART_Init(void);
-
 static void MX_ADC1_Init(void);
 static void MX_TIM1_Init(void);
-
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -159,7 +159,7 @@ void printf_DMA(const char *format,...)
   }
 
 float test = 0;
-
+extern volatile uint16_t adc_raw[3];
 /* USER CODE END 0 */
 
 /**
@@ -202,14 +202,45 @@ int main(void)
 	
 	uint8_t _dbg_Buff[150];
 	
-	adc_test_status = ADC_TestStart();
+//	adc_test_status = ADC_TestStart();
 
-	if (adc_test_status != HAL_OK)
-	{
-			adc_test_error = HAL_ADC_GetError(&hadc1);
-			Error_Handler();
-  }
+//	if (adc_test_status != HAL_OK)
+//	{
+//			adc_test_error = HAL_ADC_GetError(&hadc1);
+//			Error_Handler();
+//  }
 	
+	/* 三相初始比较值：2500/5000，约50%占空�? */
+	//pwm_compare_status = TIM1_ThreePhase_SetCompare(2500U, 2500U, 2500U);
+   // TIM1_ThreePhase_DebugRead();
+//    if (pwm_compare_status != HAL_OK)
+//	{
+//			Error_Handler();
+//	}
+
+	/* 同时�?启三路PWM及对应互补输�? */
+	//pwm_start_status = TIM1_ThreePhase_Start();
+  //  TIM1_ThreePhase_DebugRead();
+//    if (pwm_start_status != HAL_OK)
+//	{
+//			Error_Handler();
+//	}
+
+	HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
+	HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
+	HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
+	HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_4);
+
+	HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1);
+	HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_2);
+	HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_3);
+
+	__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 500);
+	__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 1000);
+	__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, 1500);
+	__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_4, 1500);
+	
+	HAL_ADCEx_InjectedStart_IT(&hadc1);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -219,11 +250,14 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+    //TIM1_ThreePhase_DebugRead();
 		HAL_Delay(1);
 		test = test + 0.01;
 		if(test > 10.0)
 			test = 0;
-		Vofa_packet.fdata[0] = test;
+		Vofa_packet.fdata[0] = adc_raw[0]/ 4096.0 * 3.3;
+		Vofa_packet.fdata[1] = adc_raw[1]/ 4096.0 * 3.3;
+	  Vofa_packet.fdata[2] = adc_raw[2]/ 4096.0 * 3.3;
 		Vofa_SendFloat(&Vofa_packet);
 		
 		//HAL_Delay(1000);
@@ -395,7 +429,7 @@ static void MX_TIM1_Init(void)
   htim1.Init.Period = 5000;
   htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim1.Init.RepetitionCounter = 0;
-  htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
   if (HAL_TIM_Base_Init(&htim1) != HAL_OK)
   {
     Error_Handler();
@@ -405,32 +439,50 @@ static void MX_TIM1_Init(void)
   {
     Error_Handler();
   }
-  if (HAL_TIM_OC_Init(&htim1) != HAL_OK)
+  if (HAL_TIM_PWM_Init(&htim1) != HAL_OK)
   {
     Error_Handler();
   }
-  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_OC4REF;
   sMasterConfig.MasterOutputTrigger2 = TIM_TRGO2_RESET;
   sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
   if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig) != HAL_OK)
   {
     Error_Handler();
   }
-  sConfigOC.OCMode = TIM_OCMODE_TIMING;
-  sConfigOC.Pulse = 0;
+  sConfigOC.OCMode = TIM_OCMODE_PWM1;
+  sConfigOC.Pulse = 2500;
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
-  sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
+  sConfigOC.OCNPolarity = TIM_OCNPOLARITY_LOW;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
   sConfigOC.OCIdleState = TIM_OCIDLESTATE_RESET;
-  sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_RESET;
-  if (HAL_TIM_OC_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_4) != HAL_OK)
+  sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_SET;
+  if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
   {
     Error_Handler();
   }
+  sConfigOC.Pulse = 2000;
+  if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigOC.Pulse = 1000;
+  if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigOC.Pulse = 200;
+  sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
+  sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_RESET;
+  if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_4) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  HAL_TIMEx_EnableDeadTimePreload(&htim1);
   sBreakDeadTimeConfig.OffStateRunMode = TIM_OSSR_DISABLE;
   sBreakDeadTimeConfig.OffStateIDLEMode = TIM_OSSI_DISABLE;
   sBreakDeadTimeConfig.LockLevel = TIM_LOCKLEVEL_OFF;
-  sBreakDeadTimeConfig.DeadTime = 0;
+  sBreakDeadTimeConfig.DeadTime = 96;
   sBreakDeadTimeConfig.BreakState = TIM_BREAK_DISABLE;
   sBreakDeadTimeConfig.BreakPolarity = TIM_BREAKPOLARITY_HIGH;
   sBreakDeadTimeConfig.BreakFilter = 0;
@@ -447,6 +499,7 @@ static void MX_TIM1_Init(void)
   /* USER CODE BEGIN TIM1_Init 2 */
 
   /* USER CODE END TIM1_Init 2 */
+  HAL_TIM_MspPostInit(&htim1);
 
 }
 
@@ -533,8 +586,8 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOF_CLK_ENABLE();
   __HAL_RCC_GPIOE_CLK_ENABLE();
-  __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
+  __HAL_RCC_GPIOA_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOE, LED0_Pin|LED1_Pin, GPIO_PIN_SET);
