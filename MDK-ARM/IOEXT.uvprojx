@@ -338,9 +338,9 @@
             <v6Rtti>0</v6Rtti>
             <VariousControls>
               <MiscControls></MiscControls>
-              <Define>USE_HAL_DRIVER,STM32G474xx</Define>
+              <Define>USE_HAL_DRIVER,STM32G474xx,ARM_MATH_CM4,__TARGET_FPU_VFP</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;../User</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;../User;../Drivers/CMSIS/DSP/Include</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -775,6 +775,11 @@
           <GroupName>Drivers/CMSIS</GroupName>
           <Files>
             <File>
+              <FileName>arm_cortexM4lf_math.lib</FileName>
+              <FileType>4</FileType>
+              <FilePath>..\Drivers\CMSIS\DSP\Lib\ARM\arm_cortexM4lf_math.lib</FilePath>
+            </File>
+            <File>
               <FileName>system_stm32g4xx.c</FileName>
               <FileType>1</FileType>
               <FilePath>../Core/Src/system_stm32g4xx.c</FilePath>
@@ -793,6 +798,16 @@
               <FileName>adc_injected.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\User\adc_injected.h</FilePath>
+            </File>
+            <File>
+              <FileName>FOC.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\User\FOC.c</FilePath>
+            </File>
+            <File>
+              <FileName>FOC.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\User\FOC.h</FilePath>
             </File>
           </Files>
         </Group>
