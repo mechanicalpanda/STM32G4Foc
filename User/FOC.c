@@ -79,6 +79,32 @@ float _normalizeAngle(float angle)
     return a >= 0.0f ? a : (a + _2PI);
 }
 
+//排序算法， 将三个整数按从小到大排序
+void Sort3(uint16_t *a, uint16_t *b, uint16_t *c)
+{
+    int temp;
+
+    if (*a > *b)
+    {
+        temp = *a;
+        *a = *b;
+        *b = temp;
+    }
+
+    if (*b > *c)
+    {
+        temp = *b;
+        *b = *c;
+        *c = temp;
+    }
+
+    if (*a > *b)
+    {
+        temp = *a;
+        *a = *b;
+        *b = temp;
+    }
+}
 
 // FOC核心函数：输入Uq、Ud和电角度，输出三路PWM
 uint16_t setPhaseVoltage(float Uq, float Ud, float angle_el)
@@ -206,6 +232,36 @@ uint16_t setPhaseVoltage(float Uq, float Ud, float angle_el)
 	svpwm_pars.Tc = Tc;
 	//printf("[Ta,Tb,Tc]:%f,%f,%f\r\n", Ta, Tb, Tc);
 	Set_PWM(Ta, Tb, Tc); // 输出三路PWM，驱动无刷电机转动
+  
+	// Start Adc SamplePoint Calc
+	
+	uint16_t TaInt = Ta * PWM_ARR;
+	uint16_t TbInt = Tb * PWM_ARR;
+	uint16_t TcInt = Tc * PWM_ARR;
+	
+	uint16_t Tmin = TaInt;
+	uint16_t Tmid = TbInt;
+	uint16_t Tmax = TcInt;
+	
+	Sort3(&Tmin, &Tmid, &Tmax);
+	
+	if(Tmin / 2 >= AdcSampleTime) //可以在中点进行采样
+	{
+		
+	}
+	else if((Tmin >= (AdcSampleTime + DeathTime + AdcNoiseTime))&& (Tmin / 2 < AdcSampleTime)) //还在中间进行采样，但是采样点不在中间位置
+	{
+		
+	}
+	else if((Tmin < (AdcSampleTime + DeathTime + AdcNoiseTime))&&((Tmid - Tmin)>=(AdcSampleTime + DeathTime + AdcNoiseTime))) //采样点移动到中间PWM外部
+	{
+		
+	}
+	else //无法采样相电流，需要处理
+	{
+		
+	}
+		   
 
 	return 1;
 }
