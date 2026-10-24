@@ -36,7 +36,7 @@ TIM_HandleTypeDef htim1;
 uint8_t receive_buff[256] = {0};
 UART_HandleTypeDef huart1;
 
-#define DATA_COUNT_MAX 3
+#define DATA_COUNT_MAX 8
 typedef struct
 {
     float fdata[DATA_COUNT_MAX];
@@ -91,6 +91,7 @@ extern ThreePhase_t current ;
 ADC_HandleTypeDef hadc1;
 
 TIM_HandleTypeDef htim1;
+TIM_HandleTypeDef htim3;
 
 UART_HandleTypeDef huart1;
 DMA_HandleTypeDef hdma_usart1_tx;
@@ -128,6 +129,7 @@ static void MX_DMA_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_TIM1_Init(void);
+static void MX_TIM3_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -162,6 +164,11 @@ void printf_DMA(const char *format,...)
 float test = 0;
 extern volatile uint16_t adc_raw[3];
 float testangle = 0.0;
+extern Park_t   Park_out;
+uint32_t encoder = 0;
+extern float Angle;
+int Direction;//编码器方�?
+extern int speed_count;	
 /* USER CODE END 0 */
 
 /**
@@ -197,6 +204,7 @@ int main(void)
   MX_USART1_UART_Init();
   MX_ADC1_Init();
   MX_TIM1_Init();
+  MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
   __HAL_UART_ENABLE_IT(&huart1, UART_IT_IDLE);
 	HAL_UART_Receive_DMA(&huart1, (uint8_t*)receive_buff, 255); 
@@ -241,10 +249,22 @@ int main(void)
 //	__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 1000);
 //	__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, 1500);
 //	__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_4, 4999);
+
+  HAL_TIM_Encoder_Start(&htim3, TIM_CHANNEL_ALL);
+	
+	
+	
+	HAL_GPIO_WritePin(PM1_CTRL_SD_GPIO_Port,PM1_CTRL_SD_Pin,GPIO_PIN_SET); //�?启电压控�?
+	
+	//机械零点寻找
+	setPhaseVoltage(0.0, 1.8, 0);		
+	HAL_Delay(3000);
+	__HAL_TIM_SET_COUNTER(&htim3, 0);
 	
 	HAL_ADCEx_InjectedStart_IT(&hadc1);
 	
-	HAL_GPIO_WritePin(PM1_CTRL_SD_GPIO_Port,PM1_CTRL_SD_Pin,GPIO_PIN_SET); //�?启电压控�?
+	
+		
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -265,13 +285,19 @@ int main(void)
 //		test = test + 0.01;
 //		if(test > 10.0)
 //			test = 0;
-		
+		encoder = (uint32_t)(__HAL_TIM_GET_COUNTER(&htim3));
 		Vofa_packet.fdata[0] = current.a;
 		Vofa_packet.fdata[1] = current.b;
 	  Vofa_packet.fdata[2] = current.c;
+		Vofa_packet.fdata[3] = Park_out.d;
+		Vofa_packet.fdata[4] = Park_out.q;
+		Vofa_packet.fdata[5] = (float)(__HAL_TIM_GET_COUNTER(&htim3)) * 0.001;
+		Vofa_packet.fdata[6] = Angle; 
+		Vofa_packet.fdata[7] = speed_count;
 		//Vofa_packet.fdata[3] = test;
 		Vofa_SendFloat(&Vofa_packet);
-		
+	
+    //Direction = __HAL_TIM_IS_TIM_COUNTING_DOWN(&htim3);	
 		//HAL_Delay(1000);
 		//printf_DMA("TEST \r\n");
 		//HAL_UART_Transmit_DMA(&huart1, (const uint8_t *)"TEST", 5);
@@ -513,6 +539,55 @@ static void MX_TIM1_Init(void)
 }
 
 /**
+  * @brief TIM3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM3_Init(void)
+{
+
+  /* USER CODE BEGIN TIM3_Init 0 */
+
+  /* USER CODE END TIM3_Init 0 */
+
+  TIM_Encoder_InitTypeDef sConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM3_Init 1 */
+
+  /* USER CODE END TIM3_Init 1 */
+  htim3.Instance = TIM3;
+  htim3.Init.Prescaler = 0;
+  htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim3.Init.Period = 9999;
+  htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
+  sConfig.EncoderMode = TIM_ENCODERMODE_TI12;
+  sConfig.IC1Polarity = TIM_ICPOLARITY_RISING;
+  sConfig.IC1Selection = TIM_ICSELECTION_DIRECTTI;
+  sConfig.IC1Prescaler = TIM_ICPSC_DIV1;
+  sConfig.IC1Filter = 0;
+  sConfig.IC2Polarity = TIM_ICPOLARITY_RISING;
+  sConfig.IC2Selection = TIM_ICSELECTION_DIRECTTI;
+  sConfig.IC2Prescaler = TIM_ICPSC_DIV1;
+  sConfig.IC2Filter = 0;
+  if (HAL_TIM_Encoder_Init(&htim3, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM3_Init 2 */
+
+  /* USER CODE END TIM3_Init 2 */
+
+}
+
+/**
   * @brief USART1 Initialization Function
   * @param None
   * @retval None
@@ -594,9 +669,9 @@ static void MX_GPIO_Init(void)
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOF_CLK_ENABLE();
+  __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOE_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
-  __HAL_RCC_GPIOA_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(PM1_CTRL_SD_GPIO_Port, PM1_CTRL_SD_Pin, GPIO_PIN_RESET);

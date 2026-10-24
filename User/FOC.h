@@ -72,4 +72,7 @@ void Set_PWM(float _CCR1, float _CCR2, float _CCR3);
 Clarke_t Clarke_Transform(ThreePhase_t current) ;
 Park_t Park_Transform(Clarke_t clarke, float theta);
 Clarke_t Inverse_Park_Transform(Park_t park, float theta) ;
+float _normalizeAngle(float angle);
+
+#define  _2PI  (6.28318530717958f)
 #endif

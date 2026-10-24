@@ -60,6 +60,30 @@ extern volatile TIM1_PWM_Debug_t tim1_pwm_debug;
 extern volatile HAL_StatusTypeDef pwm_compare_status;
 extern volatile HAL_StatusTypeDef pwm_start_status;
 void TIM1_ThreePhase_DebugRead(void);
+
+#define ENCODER_COUNT 2500
+#define POLEPAIR      5
+#define ELEC_COUNT (ENCODER_COUNT * 4 - 1)
+#define MOTOR_MAX_SPEED_RPM 3800
+#define CURRLOOPFREQ 1000
+#define SPEED_LOOP_COUNT (3800 * ELEC_COUNT / 60 / CURRLOOPFREQ)
+
+#define MOTOR_R 0.235
+#define MOTOR_L 0.00027
+#define CUR_LOOP_BW_Hz 1500
+#define KP_cur (MOTOR_L * CUR_LOOP_BW_Hz * 2 * 3.1415926)
+#define KI_cur (MOTOR_R * CUR_LOOP_BW_Hz * 2 * 3.1415926)
+#define Ts_Cur     0.0000625
+typedef struct {
+    float Kp;
+    float Ki;
+    float Ts;
+    float integral;
+    float integral_limit;
+    float output_limit;
+    float output;
+} PI_Controller;
+
 #ifdef __cplusplus
 }
 #endif

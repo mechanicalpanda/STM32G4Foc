@@ -33,12 +33,102 @@ uint16_t curr_offset_c = CURRENT_ZERO_OFFSET_ADC;
 ThreePhase_t current = {0.0};
 float testang = 0.0;
 
-//#define DYN_ADC_SAMPL
+#define DYN_ADC_SAMPL
+Clarke_t Clarke_out;
+Park_t   Park_out;
+float Angle = 0.0;
+extern TIM_HandleTypeDef htim3;
+
+const int speed_Div = 16; //speed loop 1K
+int speed_Div_count = 0;
+int enc = 0;
+int enc_last = 0;
+int speed_count = 0;
+
+PI_Controller PI_Cur_d  = {
+    .Kp = KP_cur,
+    .Ki = KI_cur,
+    .Ts = Ts_Cur,
+    .integral = 0.0,
+    .integral_limit = 2.0,
+    .output_limit = 1.0,
+    .output = 0.0
+};
+
+PI_Controller PI_Cur_q  = {
+    .Kp = KP_cur,
+    .Ki = KI_cur,
+    .Ts = Ts_Cur,
+    .integral = 0.0,
+    .integral_limit = 2.0,
+    .output_limit = 1.0,
+    .output = 0.0
+};
+
+PI_Controller current_speed_pid = {
+    .Kp = 0.0088,
+    .Ki = 16.54,
+    .Ts = 0.001,
+    .integral = 0.0,
+    .integral_limit = 1.0,
+    .output_limit = 1.0,
+    .output = 0.0
+};
+
+float PI_Update(PI_Controller *pi, float ref, float feedback) 
+{
+    float error = ref - feedback;
+	
+    pi->integral += pi->Ki * error * pi->Ts;
+	
+    if (pi->integral > pi->integral_limit)
+		{
+        pi->integral = pi->integral_limit;
+		}
+    else if (pi->integral < -pi->integral_limit)
+		{
+        pi->integral = -pi->integral_limit;
+		}
+		
+    pi->output = pi->Kp * error + pi->integral;
+		
+    if (pi->output > pi->output_limit)
+        pi->output = pi->output_limit;
+    else if (pi->output < -pi->output_limit)
+        pi->output = -pi->output_limit;
+    return pi->output;
+}
+
+float PI_Update_AntiWindup(PI_Controller *pi, float ref, float feedback) 
+{
+    float error = ref - feedback;
+    float output_unclamped = pi->Kp * error + pi->integral;
+    
+    if (output_unclamped > -pi->output_limit && output_unclamped < pi->output_limit) 
+		{
+        pi->integral += pi->Ki * error * pi->Ts;
+    }
+    
+    pi->output = pi->Kp * error + pi->integral;
+    
+    if (pi->output > pi->output_limit)
+        pi->output = pi->output_limit;
+    else if (pi->output < -pi->output_limit)
+        pi->output = -pi->output_limit;
+    
+    return pi->output;
+}
+
+float vd = 0.0;
+float vq = 0.0;
+
+//#define OPENLOOP
 
 void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
 {
     if (hadc->Instance == ADC1)
     {
+			
 			 HAL_GPIO_TogglePin(LED0_GPIO_Port,LED0_Pin);
         adc_raw[0] = (uint16_t)HAL_ADCEx_InjectedGetValue(
             hadc, ADC_INJECTED_RANK_1);
@@ -50,6 +140,9 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
             hadc, ADC_INJECTED_RANK_3);
 			
 			count_test++;
+			
+			Angle =  _normalizeAngle(__HAL_TIM_GET_COUNTER(&htim3) * POLEPAIR * _2PI / ELEC_COUNT);
+			 
 #ifdef 		DYN_ADC_SAMPL	
 			if(AdcInjectSel == ADCINVALDE)
 			{
@@ -96,10 +189,54 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
 		   current.b = (adc_raw[1] - curr_offset_b) * ADCbitCurrent;
 	     current.c = (adc_raw[2] - curr_offset_c) * ADCbitCurrent;
 #endif			
-		 	
-		testang = testang + 0.004;
+		
+		Clarke_out = Clarke_Transform(current);
+
+#ifdef OPENLOOP		 
+    Park_out = Park_Transform(Clarke_out, _normalizeAngle(testang)); 		
+    testang = testang + 0.004;		 
+#else
+    Park_out = Park_Transform(Clarke_out, Angle); 		 
+#endif		 
+	
+		float Id_trg = 0.0;
+		float Iq_trg = 0.2;
+		 
+		if( speed_Div_count++ >= 15)
+		{
+			 speed_Div_count = 0;
+			 
+			 enc = (uint32_t)(__HAL_TIM_GET_COUNTER(&htim3));
+			 
+			 speed_count = enc - enc_last;
+			  
+			if((speed_count > 0)&&(__HAL_TIM_IS_TIM_COUNTING_DOWN(&htim3) == 1))
+			{
+				 speed_count = speed_count - ELEC_COUNT;
+			}
+			if((speed_count < 0)&&(__HAL_TIM_IS_TIM_COUNTING_DOWN(&htim3) == 0))
+			{
+				 speed_count = speed_count + ELEC_COUNT;
+			}
+			 
+			 enc_last = enc;
+			
+			Iq_trg = PI_Update(&current_speed_pid, 50, speed_count);
+			
+		}
 		//testangle = 0.0;
+		
+		
+		
+		vd = PI_Update(&PI_Cur_d, Id_trg, Park_out.d);
+		vq = PI_Update(&PI_Cur_q, Iq_trg, Park_out.q);
+		
+		
+#ifdef OPENLOOP		 		
 		setPhaseVoltage(0.0, 1.8, testang);
+#else
+		setPhaseVoltage(vq, vd, Angle);
+#endif
 		 
 		 //
     }

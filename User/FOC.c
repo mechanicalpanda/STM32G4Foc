@@ -60,7 +60,7 @@ void Set_PWM(float _CCR1, float _CCR2, float _CCR3)
 
 svpwm_ svpwm_pars = {0.0, 0.0, 0.0};
 
-const float _2PI = 6.28318530717958f;
+
 
 // normalizing radian angle to [0, 2pi]
 float _normalizeAngle(float angle)
@@ -106,6 +106,7 @@ ADCINJ AdcInjectSel = THREESAMPLE;
 float test_angle_el = 0.0;
 float test_U_alpha = 0.0;
 float test_U_beta = 0.0;
+
 uint16_t setPhaseVoltage(float Uq, float Ud, float angle_el)
 {
 	static float Ts = 1.0f;
