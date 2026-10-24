@@ -4,6 +4,24 @@
 #include <stdint.h>
 #include "arm_math.h"
 
+#define SECTOR_1        (uint32_t)3
+
+#define SECTOR_2        (uint32_t)1
+
+#define SECTOR_3        (uint32_t)5
+
+#define SECTOR_4        (uint32_t)4
+
+#define SECTOR_5        (uint32_t)6
+
+#define SECTOR_6        (uint32_t)2
+
+#define CURRENT_ZERO_OFFSET_ADC 1488
+
+#define ADCbitCurrent (0.00671384)
+
+typedef enum{THREESAMPLE, TWOSAMPLE,ADCINVALDE} ADCINJ;
+extern ADCINJ AdcInjectSel;
 typedef struct {
     float32_t a;
     float32_t b;

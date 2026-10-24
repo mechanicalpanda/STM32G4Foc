@@ -25,6 +25,7 @@
 #include <stdarg.h>
 #include <string.h>
 #include "adc_injected.h"
+#include "FOC.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -52,12 +53,12 @@ void Vofa_Init(Vofa_Packet *frame)
     frame->tail[3] = 0x7f;
 }
 
+ uint8_t data[DATA_COUNT_MAX * 4 + 4] = {0};
 void Vofa_SendFloat(Vofa_Packet *packet)
  {
-    uint8_t byte[4];
     uint8_t i;
     uint32_t temp;
-	  uint8_t data[DATA_COUNT_MAX * 4 + 4] = {0};
+	 
 		data[DATA_COUNT_MAX * 4 + 4 - 1] = 0x7f;
 	  data[DATA_COUNT_MAX * 4 + 4 - 2] = 0x80;
 		data[DATA_COUNT_MAX * 4 + 4 - 3] = 0x00;
@@ -78,7 +79,7 @@ void Vofa_SendFloat(Vofa_Packet *packet)
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
- 
+extern ThreePhase_t current ;
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -160,6 +161,7 @@ void printf_DMA(const char *format,...)
 
 float test = 0;
 extern volatile uint16_t adc_raw[3];
+float testangle = 0.0;
 /* USER CODE END 0 */
 
 /**
@@ -170,7 +172,7 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-
+ 
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -235,12 +237,14 @@ int main(void)
 	HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_2);
 	HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_3);
 
-	__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 500);
-	__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 1000);
-	__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, 1500);
-	__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_4, 1500);
+//	__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 500);
+//	__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 1000);
+//	__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, 1500);
+//	__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_4, 4999);
 	
 	HAL_ADCEx_InjectedStart_IT(&hadc1);
+	
+	HAL_GPIO_WritePin(PM1_CTRL_SD_GPIO_Port,PM1_CTRL_SD_Pin,GPIO_PIN_SET); //�?启电压控�?
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -250,14 +254,22 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+		//HAL_GPIO_WritePin(PM1_CTRL_SD_GPIO_Port,PM1_CTRL_SD_Pin,GPIO_PIN_SET);
     //TIM1_ThreePhase_DebugRead();
-		HAL_Delay(1);
-		test = test + 0.01;
-		if(test > 10.0)
-			test = 0;
-		Vofa_packet.fdata[0] = adc_raw[0]/ 4096.0 * 3.3;
-		Vofa_packet.fdata[1] = adc_raw[1]/ 4096.0 * 3.3;
-	  Vofa_packet.fdata[2] = adc_raw[2]/ 4096.0 * 3.3;
+		//HAL_Delay(100);
+//		
+//		testangle = testangle + 0.002;
+//		//testangle = 0.0;
+//		setPhaseVoltage(0.0, 0.9, testangle);
+//		
+//		test = test + 0.01;
+//		if(test > 10.0)
+//			test = 0;
+		
+		Vofa_packet.fdata[0] = current.a;
+		Vofa_packet.fdata[1] = current.b;
+	  Vofa_packet.fdata[2] = current.c;
+		//Vofa_packet.fdata[3] = test;
 		Vofa_SendFloat(&Vofa_packet);
 		
 		//HAL_Delay(1000);
@@ -451,9 +463,9 @@ static void MX_TIM1_Init(void)
     Error_Handler();
   }
   sConfigOC.OCMode = TIM_OCMODE_PWM1;
-  sConfigOC.Pulse = 2500;
+  sConfigOC.Pulse = 0;
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
-  sConfigOC.OCNPolarity = TIM_OCNPOLARITY_LOW;
+  sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
   sConfigOC.OCIdleState = TIM_OCIDLESTATE_RESET;
   sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_SET;
@@ -461,18 +473,15 @@ static void MX_TIM1_Init(void)
   {
     Error_Handler();
   }
-  sConfigOC.Pulse = 2000;
   if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_2) != HAL_OK)
   {
     Error_Handler();
   }
-  sConfigOC.Pulse = 1000;
   if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_3) != HAL_OK)
   {
     Error_Handler();
   }
-  sConfigOC.Pulse = 200;
-  sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
+  sConfigOC.Pulse = 4999;
   sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_RESET;
   if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_4) != HAL_OK)
   {
@@ -519,7 +528,7 @@ static void MX_USART1_UART_Init(void)
 
   /* USER CODE END USART1_Init 1 */
   huart1.Instance = USART1;
-  huart1.Init.BaudRate = 115200;
+  huart1.Init.BaudRate = 2000000;
   huart1.Init.WordLength = UART_WORDLENGTH_8B;
   huart1.Init.StopBits = UART_STOPBITS_1;
   huart1.Init.Parity = UART_PARITY_NONE;
@@ -590,7 +599,17 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOA_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(PM1_CTRL_SD_GPIO_Port, PM1_CTRL_SD_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOE, LED0_Pin|LED1_Pin, GPIO_PIN_SET);
+
+  /*Configure GPIO pin : PM1_CTRL_SD_Pin */
+  GPIO_InitStruct.Pin = PM1_CTRL_SD_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(PM1_CTRL_SD_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : KEY0_Pin KEY1_Pin KEY2_Pin */
   GPIO_InitStruct.Pin = KEY0_Pin|KEY1_Pin|KEY2_Pin;

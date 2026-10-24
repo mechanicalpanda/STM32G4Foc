@@ -1,5 +1,7 @@
 #include "adc_injected.h"
 #include "main.h"
+#include <stdbool.h>
+#include "FOC.h"
 /* Defined by CubeMX in main.c (or adc.c/tim.c in split-file projects). */
 extern ADC_HandleTypeDef hadc1;
 extern TIM_HandleTypeDef htim1;
@@ -21,6 +23,18 @@ volatile uint32_t adc_test_stage = 0U;
 volatile HAL_StatusTypeDef adc_test_status = HAL_OK;
 volatile uint32_t adc_test_error = 0U;
 
+extern uint8_t sector_sample;
+extern bool isReSampleAdc;
+
+uint16_t curr_offset_a = CURRENT_ZERO_OFFSET_ADC;
+uint16_t curr_offset_b = CURRENT_ZERO_OFFSET_ADC;
+uint16_t curr_offset_c = CURRENT_ZERO_OFFSET_ADC;
+
+ThreePhase_t current = {0.0};
+float testang = 0.0;
+
+//#define DYN_ADC_SAMPL
+
 void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
 {
     if (hadc->Instance == ADC1)
@@ -34,8 +48,60 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
 
         adc_raw[2] = (uint16_t)HAL_ADCEx_InjectedGetValue(
             hadc, ADC_INJECTED_RANK_3);
+			
+			count_test++;
+#ifdef 		DYN_ADC_SAMPL	
+			if(AdcInjectSel == ADCINVALDE)
+			{
+				; //无效的ADC采样值，使用上一次的采样值
+			}
+			else if(AdcInjectSel == THREESAMPLE)
+		  {
+      current.a = (adc_raw[0] - curr_offset_a) * ADCbitCurrent;
+		  current.b = (adc_raw[1] - curr_offset_b) * ADCbitCurrent;
+	    current.c = (adc_raw[2] - curr_offset_c) * ADCbitCurrent;
+			}
+      else if(AdcInjectSel == TWOSAMPLE)		
+			{		
+				
+			current.a = (adc_raw[0] - curr_offset_a) * ADCbitCurrent;
+		  current.b = (adc_raw[1] - curr_offset_b) * ADCbitCurrent;
+	    current.c = (adc_raw[2] - curr_offset_c) * ADCbitCurrent;
+        
+				switch (sector_sample)
+				{
+					
+				case SECTOR_1: // 扇区1 重构A
+			  case SECTOR_6: // 扇区6
+				current.a = -(current.b+current.c);	
+					break;
+				case SECTOR_2: // 扇区2 重构B
+				case SECTOR_3: // 扇区3
+			  current.b = -(current.a+current.c);	
+					
+					break;
+				case SECTOR_4: // 扇区4 重构C
+				case SECTOR_5: // 扇区5
+				current.c = -(current.a+current.b);		
+					break;
+				
+				default:
+				
+					break;
 
-        count_test++;
+			 }
+		 }
+#else
+       current.a = (adc_raw[0] - curr_offset_a) * ADCbitCurrent;
+		   current.b = (adc_raw[1] - curr_offset_b) * ADCbitCurrent;
+	     current.c = (adc_raw[2] - curr_offset_c) * ADCbitCurrent;
+#endif			
+		 	
+		testang = testang + 0.004;
+		//testangle = 0.0;
+		setPhaseVoltage(0.0, 1.8, testang);
+		 
+		 //
     }
 }
 
