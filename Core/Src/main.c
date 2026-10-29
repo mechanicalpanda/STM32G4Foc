@@ -169,6 +169,7 @@ uint32_t encoder = 0;
 extern float Angle;
 int Direction;//编码器方�?
 extern int speed_count;	
+extern volatile uint16_t adc_raw[3];
 /* USER CODE END 0 */
 
 /**
@@ -259,7 +260,7 @@ int main(void)
 	//机械零点寻找
 	setPhaseVoltage(0.0, 1.8, 0);		
 	HAL_Delay(3000);
-	__HAL_TIM_SET_COUNTER(&htim3, 0);
+	__HAL_TIM_SET_COUNTER(&htim3, 0); //90°
 	
 	HAL_ADCEx_InjectedStart_IT(&hadc1);
 	
@@ -517,7 +518,7 @@ static void MX_TIM1_Init(void)
   sBreakDeadTimeConfig.OffStateRunMode = TIM_OSSR_DISABLE;
   sBreakDeadTimeConfig.OffStateIDLEMode = TIM_OSSI_DISABLE;
   sBreakDeadTimeConfig.LockLevel = TIM_LOCKLEVEL_OFF;
-  sBreakDeadTimeConfig.DeadTime = 96;
+  sBreakDeadTimeConfig.DeadTime = 32;
   sBreakDeadTimeConfig.BreakState = TIM_BREAK_DISABLE;
   sBreakDeadTimeConfig.BreakPolarity = TIM_BREAKPOLARITY_HIGH;
   sBreakDeadTimeConfig.BreakFilter = 0;

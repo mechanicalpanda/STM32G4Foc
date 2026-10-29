@@ -75,4 +75,5 @@ Clarke_t Inverse_Park_Transform(Park_t park, float theta) ;
 float _normalizeAngle(float angle);
 
 #define  _2PI  (6.28318530717958f)
+#define  _0_5_PI  (1.57079632679f)
 #endif

@@ -16,7 +16,7 @@ const float sqrt3 = 1.73205080756f;
 const float INV_SQRT3 = 0.577350;
 const int PWM_ARR = (5000); // PWM的计数周期
 
-#define DeathTime 48  //300ns
+#define DeathTime 32  //300ns
 
 #define AdcSampleTime 300  //1875ns 12.5 cycle
 //#define AdcSampleTime 180   //1125ns   2.5cycle
@@ -106,6 +106,17 @@ ADCINJ AdcInjectSel = THREESAMPLE;
 float test_angle_el = 0.0;
 float test_U_alpha = 0.0;
 float test_U_beta = 0.0;
+extern ThreePhase_t current;
+
+float comp = -0.00905;
+
+float getcomp(float curr)
+{
+	if(curr > 0.0)
+		 return  comp;
+	else
+		 return -comp;
+}
 
 uint16_t setPhaseVoltage(float Uq, float Ud, float angle_el)
 {
@@ -231,7 +242,17 @@ uint16_t setPhaseVoltage(float Uq, float Ud, float angle_el)
 		Tc = 0.5f;
 		break;
 	}
-  svpwm_pars.Ta = Ta;
+	
+//	if(current.a > 0.0)
+//	{
+//		
+//	}
+	
+//  svpwm_pars.Ta = Ta + getcomp(current.a);
+//	svpwm_pars.Tb = Tb + getcomp(current.b);
+//	svpwm_pars.Tc = Tc + getcomp(current.c);
+	
+	svpwm_pars.Ta = Ta;
 	svpwm_pars.Tb = Tb;
 	svpwm_pars.Tc = Tc;
 	//printf("[Ta,Tb,Tc]:%f,%f,%f\r\n", Ta, Tb, Tc);

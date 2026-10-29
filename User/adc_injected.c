@@ -7,7 +7,11 @@ extern ADC_HandleTypeDef hadc1;
 extern TIM_HandleTypeDef htim1;
 
 volatile uint32_t count_test = 0U;
+volatile uint16_t adc_raw_res[3] = {0U};
 volatile uint16_t adc_raw[3] = {0U};
+volatile uint16_t adc_raw_1[3] = {0U};
+volatile uint16_t adc_raw_2[3] = {0U};
+
 
 /*
  * 调试阶段：
@@ -31,6 +35,8 @@ uint16_t curr_offset_b = CURRENT_ZERO_OFFSET_ADC;
 uint16_t curr_offset_c = CURRENT_ZERO_OFFSET_ADC;
 
 ThreePhase_t current = {0.0};
+ThreePhase_t current_1 = {0.0};
+ThreePhase_t current_2 = {0.0};
 float testang = 0.0;
 
 #define DYN_ADC_SAMPL
@@ -50,8 +56,8 @@ PI_Controller PI_Cur_d  = {
     .Ki = KI_cur,
     .Ts = Ts_Cur,
     .integral = 0.0,
-    .integral_limit = 2.0,
-    .output_limit = 1.0,
+    .integral_limit = 5.0,
+    .output_limit = 5.0,
     .output = 0.0
 };
 
@@ -60,18 +66,18 @@ PI_Controller PI_Cur_q  = {
     .Ki = KI_cur,
     .Ts = Ts_Cur,
     .integral = 0.0,
-    .integral_limit = 2.0,
-    .output_limit = 1.0,
+    .integral_limit = 5.0,
+    .output_limit = 5.0,
     .output = 0.0
 };
 
 PI_Controller current_speed_pid = {
-    .Kp = 0.0088,
+    .Kp = 0.15,
     .Ki = 16.54,
     .Ts = 0.001,
     .integral = 0.0,
-    .integral_limit = 1.0,
-    .output_limit = 1.0,
+    .integral_limit = 3.0,
+    .output_limit = 3.0,
     .output = 0.0
 };
 
@@ -123,6 +129,15 @@ float vd = 0.0;
 float vq = 0.0;
 
 //#define OPENLOOP
+float kptest = 0.2;
+float kitest = 0.15;
+float integ_d = 0.0;
+float integ_q = 0.0;
+float limit = 1.0;
+
+float Id_trg = 0.0;
+		
+float Iq_trg = 0.2;
 
 void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
 {
@@ -130,18 +145,30 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
     {
 			
 			 HAL_GPIO_TogglePin(LED0_GPIO_Port,LED0_Pin);
-        adc_raw[0] = (uint16_t)HAL_ADCEx_InjectedGetValue(
-            hadc, ADC_INJECTED_RANK_1);
-
-        adc_raw[1] = (uint16_t)HAL_ADCEx_InjectedGetValue(
-            hadc, ADC_INJECTED_RANK_2);
-
-        adc_raw[2] = (uint16_t)HAL_ADCEx_InjectedGetValue(
-            hadc, ADC_INJECTED_RANK_3);
+			
+//       adc_raw[0] = (uint16_t)HAL_ADCEx_InjectedGetValue(hadc, ADC_INJECTED_RANK_1);
+//       adc_raw[1] = (uint16_t)HAL_ADCEx_InjectedGetValue(hadc, ADC_INJECTED_RANK_2);
+//       adc_raw[2] = (uint16_t)HAL_ADCEx_InjectedGetValue(hadc, ADC_INJECTED_RANK_3);
+			
+			  adc_raw_res[0] = (uint16_t)HAL_ADCEx_InjectedGetValue(hadc, ADC_INJECTED_RANK_1);
+       adc_raw_res[1] = (uint16_t)HAL_ADCEx_InjectedGetValue(hadc, ADC_INJECTED_RANK_2);
+       adc_raw_res[2] = (uint16_t)HAL_ADCEx_InjectedGetValue(hadc, ADC_INJECTED_RANK_3);
 			
 			count_test++;
+//			adc_raw_res[0] =  (adc_raw[0] + adc_raw_1[0] + adc_raw_2[0]) / 3;
+//			adc_raw_res[1] =  (adc_raw[1] + adc_raw_1[1] + adc_raw_2[1]) / 3;
+//			adc_raw_res[2] =  (adc_raw[2] + adc_raw_1[2] + adc_raw_2[2]) / 3;
+//			
+//			adc_raw_2[0] = adc_raw_1[0];
+//			adc_raw_1[0] = adc_raw[0];
+//			
+//			adc_raw_2[1] = adc_raw_1[1];
+//			adc_raw_1[1] = adc_raw[1];
+//			
+//			adc_raw_2[2] = adc_raw_1[2];
+//			adc_raw_1[2] = adc_raw[2];
 			
-			Angle =  _normalizeAngle(__HAL_TIM_GET_COUNTER(&htim3) * POLEPAIR * _2PI / ELEC_COUNT);
+			Angle =  _normalizeAngle(__HAL_TIM_GET_COUNTER(&htim3) * POLEPAIR * _2PI / ELEC_COUNT );
 			 
 #ifdef 		DYN_ADC_SAMPL	
 			if(AdcInjectSel == ADCINVALDE)
@@ -150,16 +177,16 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
 			}
 			else if(AdcInjectSel == THREESAMPLE)
 		  {
-      current.a = (adc_raw[0] - curr_offset_a) * ADCbitCurrent;
-		  current.b = (adc_raw[1] - curr_offset_b) * ADCbitCurrent;
-	    current.c = (adc_raw[2] - curr_offset_c) * ADCbitCurrent;
+      current.a = -(adc_raw_res[0] - curr_offset_a) * ADCbitCurrent;
+		  current.b = -(adc_raw_res[1] - curr_offset_b) * ADCbitCurrent;
+	    current.c = -(adc_raw_res[2] - curr_offset_c) * ADCbitCurrent;
 			}
       else if(AdcInjectSel == TWOSAMPLE)		
 			{		
 				
-			current.a = (adc_raw[0] - curr_offset_a) * ADCbitCurrent;
-		  current.b = (adc_raw[1] - curr_offset_b) * ADCbitCurrent;
-	    current.c = (adc_raw[2] - curr_offset_c) * ADCbitCurrent;
+			current.a = -(adc_raw_res[0] - curr_offset_a) * ADCbitCurrent;
+		  current.b = -(adc_raw_res[1] - curr_offset_b) * ADCbitCurrent;
+	    current.c = -(adc_raw_res[2] - curr_offset_c) * ADCbitCurrent;
         
 				switch (sector_sample)
 				{
@@ -190,17 +217,18 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
 	     current.c = (adc_raw[2] - curr_offset_c) * ADCbitCurrent;
 #endif			
 		
+		  
 		Clarke_out = Clarke_Transform(current);
+		
 
 #ifdef OPENLOOP		 
     Park_out = Park_Transform(Clarke_out, _normalizeAngle(testang)); 		
-    testang = testang + 0.004;		 
+    testang = testang + 0.005;		 
 #else
     Park_out = Park_Transform(Clarke_out, Angle); 		 
 #endif		 
 	
-		float Id_trg = 0.0;
-		float Iq_trg = 0.2;
+		
 		 
 		if( speed_Div_count++ >= 15)
 		{
@@ -224,18 +252,49 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
 			Iq_trg = PI_Update(&current_speed_pid, 50, speed_count);
 			
 		}
-		//testangle = 0.0;
 		
-		
+//		Iq_trg = 0.1;
+//		Id_trg = 0.0;
 		
 		vd = PI_Update(&PI_Cur_d, Id_trg, Park_out.d);
 		vq = PI_Update(&PI_Cur_q, Iq_trg, Park_out.q);
 		
 		
+//		
+//		float err_q = Iq_trg - Park_out.q;
+//		float err_d = Id_trg - Park_out.d;
+//	  
+//		integ_q +=  err_q;
+//		integ_d +=  err_d;
+//		
+//		if(integ_d > limit)
+//			integ_d = limit;
+//		if(integ_d < -limit)
+//			integ_d = -limit;
+//		
+//			if(integ_q > limit)
+//			integ_q = limit;
+//		if(integ_q < -limit)
+//			integ_q = -limit;
+//		
+//		vq = kptest * err_q + integ_q * kitest;
+//		vd = kptest * err_d + integ_d * kitest;
+//		
+//		if(vd > limit)
+//			vd = limit;
+//		if(vd < -limit)
+//			vd = -limit;
+//		
+//			if(vq > limit)
+//			vq = limit;
+//		if(vq < -limit)
+//			vq = -limit;
+			 
+		
 #ifdef OPENLOOP		 		
 		setPhaseVoltage(0.0, 1.8, testang);
 #else
-		setPhaseVoltage(vq, vd, Angle);
+		setPhaseVoltage(vq, vd, Angle); //normal
 #endif
 		 
 		 //
