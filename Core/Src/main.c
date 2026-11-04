@@ -26,6 +26,7 @@
 #include <string.h>
 #include "adc_injected.h"
 #include "FOC.h"
+#include "PLL.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -36,7 +37,7 @@ TIM_HandleTypeDef htim1;
 uint8_t receive_buff[256] = {0};
 UART_HandleTypeDef huart1;
 
-#define DATA_COUNT_MAX 8
+#define DATA_COUNT_MAX 4
 typedef struct
 {
     float fdata[DATA_COUNT_MAX];
@@ -170,6 +171,8 @@ extern float Angle;
 int Direction;//编码器方�?
 extern int speed_count;	
 extern volatile uint16_t adc_raw[3];
+extern float speed_after_filter;
+extern float speed_count_tick;
 /* USER CODE END 0 */
 
 /**
@@ -210,7 +213,7 @@ int main(void)
   __HAL_UART_ENABLE_IT(&huart1, UART_IT_IDLE);
 	HAL_UART_Receive_DMA(&huart1, (uint8_t*)receive_buff, 255); 
 	Vofa_Init(&Vofa_packet);
-	
+
 	uint8_t _dbg_Buff[150];
 	
 //	adc_test_status = ADC_TestStart();
@@ -257,14 +260,24 @@ int main(void)
 	
 	HAL_GPIO_WritePin(PM1_CTRL_SD_GPIO_Port,PM1_CTRL_SD_Pin,GPIO_PIN_SET); //�?启电压控�?
 	
+//	HAL_Delay(1000);
+//	HAL_ADCEx_InjectedStart_IT(&hadc1);
+//	HAL_Delay(2000);
+	
 	//机械零点寻找
 	setPhaseVoltage(0.0, 1.8, 0);		
 	HAL_Delay(3000);
 	__HAL_TIM_SET_COUNTER(&htim3, 0); //90°
 	
+	EncoderPLL_Init(&encoder_pll, 0);
+	
 	HAL_ADCEx_InjectedStart_IT(&hadc1);
 	
 	
+	
+	LPF2_Init(&speed_filter, 50.0);
+	VoltageLPF_Init(&voltage_filter, 0.0f, 0.0f);
+
 		
   /* USER CODE END 2 */
 
@@ -287,19 +300,26 @@ int main(void)
 //		if(test > 10.0)
 //			test = 0;
 		encoder = (uint32_t)(__HAL_TIM_GET_COUNTER(&htim3));
-		Vofa_packet.fdata[0] = current.a;
-		Vofa_packet.fdata[1] = current.b;
-	  Vofa_packet.fdata[2] = current.c;
-		Vofa_packet.fdata[3] = Park_out.d;
-		Vofa_packet.fdata[4] = Park_out.q;
-		Vofa_packet.fdata[5] = (float)(__HAL_TIM_GET_COUNTER(&htim3)) * 0.001;
-		Vofa_packet.fdata[6] = Angle; 
-		Vofa_packet.fdata[7] = speed_count;
+		
+		Vofa_packet.fdata[0] = speed_count_tick;
+		Vofa_packet.fdata[1] = speed_after_filter;
+	  Vofa_packet.fdata[2] = speed_count;
+		Vofa_packet.fdata[3] = Park_out.q;
+		
+//		Vofa_packet.fdata[0] = current.a;
+//		Vofa_packet.fdata[1] = current.b;
+//	  Vofa_packet.fdata[2] = current.c;
+//		Vofa_packet.fdata[3] = Park_out.d;
+//		Vofa_packet.fdata[4] = Park_out.q;
+//		Vofa_packet.fdata[5] = (float)(__HAL_TIM_GET_COUNTER(&htim3)) * 0.001;
+//		//Vofa_packet.fdata[6] = Angle; 
+//		Vofa_packet.fdata[6] = speed_after_filter;
+//		Vofa_packet.fdata[7] = speed_count;
 		//Vofa_packet.fdata[3] = test;
 		Vofa_SendFloat(&Vofa_packet);
 	
     //Direction = __HAL_TIM_IS_TIM_COUNTING_DOWN(&htim3);	
-		//HAL_Delay(1000);
+		//HAL_Delay(10);
 		//printf_DMA("TEST \r\n");
 		//HAL_UART_Transmit_DMA(&huart1, (const uint8_t *)"TEST", 5);
   }

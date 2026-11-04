@@ -2,6 +2,8 @@
 #include "main.h"
 #include <stdbool.h>
 #include "FOC.h"
+#include <math.h>
+#include "PLL.h"
 /* Defined by CubeMX in main.c (or adc.c/tim.c in split-file projects). */
 extern ADC_HandleTypeDef hadc1;
 extern TIM_HandleTypeDef htim1;
@@ -50,6 +52,9 @@ int speed_Div_count = 0;
 int enc = 0;
 int enc_last = 0;
 int speed_count = 0;
+float speed_count_last = 0;
+float speed_count_last_last = 0;
+float speed_filter_para = 0.2;
 
 PI_Controller PI_Cur_d  = {
     .Kp = KP_cur,
@@ -72,14 +77,67 @@ PI_Controller PI_Cur_q  = {
 };
 
 PI_Controller current_speed_pid = {
-    .Kp = 0.15,
-    .Ki = 16.54,
-    .Ts = 0.001,
+	  .Kp = 0.05,
+    .Ki = 3.00,
+    .Ts = 0.0005,
     .integral = 0.0,
     .integral_limit = 3.0,
     .output_limit = 3.0,
     .output = 0.0
+	
+//	  .Kp = 0.05,
+//    .Ki = 16.54,
+//    .Ts = 0.001,
+//    .integral = 0.0,
+//    .integral_limit = 3.0,
+//    .output_limit = 3.0,
+//    .output = 0.0
 };
+
+
+
+/*
+ * 初始化为某个稳态输入值。
+ * 传入首次采样值，可避免启动时从零上升的过渡过程。
+ */
+void LPF2_Init(LPF2_t *f, float initial_value)
+{
+    f->x1 = initial_value;
+    f->x2 = initial_value;
+    f->y1 = initial_value;
+    f->y2 = initial_value;
+}
+
+/*
+ * Fs = 1000 Hz
+ * Fc = 200 Hz
+ * 阻尼比 = 0.707
+ * 必须每 1 ms 调用一次
+ */
+static inline float LPF2_Update(LPF2_t *f, float input)
+{
+	const float b0 =  0.0674582648f; //200Hz
+	const float b1 =  0.1349165295f;
+	const float b2 =  0.0674582648f;
+	const float a1 = -1.1430311809f;
+	const float a2 =  0.4128642400f;
+
+    float output = b0 * input
+                 + b1 * f->x1
+                 + b2 * f->x2
+                 - a1 * f->y1
+                 - a2 * f->y2;
+
+    f->x2 = f->x1;
+    f->x1 = input;
+
+    f->y2 = f->y1;
+    f->y1 = output;
+
+    return output;
+}
+
+LPF2_t speed_filter;
 
 float PI_Update(PI_Controller *pi, float ref, float feedback) 
 {
@@ -102,6 +160,32 @@ float PI_Update(PI_Controller *pi, float ref, float feedback)
         pi->output = pi->output_limit;
     else if (pi->output < -pi->output_limit)
         pi->output = -pi->output_limit;
+    return pi->output;
+}
+
+float PI_Update_Speed(PI_Controller *pi, float ref, float feedback, float feedback_last, float feedback_last_last, float Kd, float feedback_raw) 
+{
+    float error = ref - feedback;
+	  float error_raw = ref - feedback_raw;
+	
+    pi->integral += pi->Ki * error_raw * pi->Ts;
+	
+    if (pi->integral > pi->integral_limit)
+		{
+        pi->integral = pi->integral_limit;
+		}
+    else if (pi->integral < -pi->integral_limit)
+		{
+        pi->integral = -pi->integral_limit;
+		}
+		
+    pi->output = pi->Kp * error + pi->integral + Kd * (feedback - 2 * feedback_last + feedback_last_last);
+		
+    if (pi->output > pi->output_limit)
+        pi->output = pi->output_limit;
+    else if (pi->output < -pi->output_limit)
+        pi->output = -pi->output_limit;
+		
     return pi->output;
 }
 
@@ -129,15 +213,42 @@ float vd = 0.0;
 float vq = 0.0;
 
 //#define OPENLOOP
-float kptest = 0.2;
-float kitest = 0.15;
-float integ_d = 0.0;
-float integ_q = 0.0;
-float limit = 1.0;
 
-float Id_trg = 0.0;
-		
+float Id_trg = 0.0;	
 float Iq_trg = 0.2;
+float speed_after_filter = 0.0;
+float Kd_Speed = -0.05;
+bool isCurrCalib = true;
+int adccount = 0;
+int adc0sum = 0;
+int adc1sum = 0;
+int adc2sum = 0;
+const int ADCSUMCOUNT = 1000;
+
+VoltageLPF_t voltage_filter;
+float speed_count_tick;
+inline void VoltageLPF_Init(VoltageLPF_t *f,
+                                   float vd_initial,
+                                   float vq_initial)
+{
+    f->vd = vd_initial;
+    f->vq = vq_initial;
+}
+
+
+/* 电流环频率：16 kHz，每 62.5 us 调用一次 */
+void VoltageLPF_Update(VoltageLPF_t *f,
+                                     float *vd,
+                                     float *vq)
+{
+    const float alpha = VOLTAGE_LPF_ALPHA;
+
+    f->vd += alpha * (*vd - f->vd);
+    f->vq += alpha * (*vq - f->vq);
+
+    *vd = f->vd;
+    *vq = f->vq;
+}
 
 void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
 {
@@ -145,29 +256,31 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
     {
 			
 			 HAL_GPIO_TogglePin(LED0_GPIO_Port,LED0_Pin);
-			
-//       adc_raw[0] = (uint16_t)HAL_ADCEx_InjectedGetValue(hadc, ADC_INJECTED_RANK_1);
-//       adc_raw[1] = (uint16_t)HAL_ADCEx_InjectedGetValue(hadc, ADC_INJECTED_RANK_2);
-//       adc_raw[2] = (uint16_t)HAL_ADCEx_InjectedGetValue(hadc, ADC_INJECTED_RANK_3);
-			
-			  adc_raw_res[0] = (uint16_t)HAL_ADCEx_InjectedGetValue(hadc, ADC_INJECTED_RANK_1);
+				
+			 adc_raw_res[0] = (uint16_t)HAL_ADCEx_InjectedGetValue(hadc, ADC_INJECTED_RANK_1);
        adc_raw_res[1] = (uint16_t)HAL_ADCEx_InjectedGetValue(hadc, ADC_INJECTED_RANK_2);
        adc_raw_res[2] = (uint16_t)HAL_ADCEx_InjectedGetValue(hadc, ADC_INJECTED_RANK_3);
+			 
+			if(isCurrCalib == false)
+			{
+				 if(adccount == ADCSUMCOUNT)
+				 {
+					 isCurrCalib = true;
+					 curr_offset_a = adc0sum / ADCSUMCOUNT;
+					 curr_offset_b = adc1sum / ADCSUMCOUNT;
+					 curr_offset_c = adc2sum / ADCSUMCOUNT;
+					 
+				 }
+				 adc0sum +=  adc_raw_res[0];
+				 adc1sum +=  adc_raw_res[1];
+				 adc2sum +=  adc_raw_res[2];
+				 adccount = adccount + 1;
+			}
+			else
+			{
 			
 			count_test++;
-//			adc_raw_res[0] =  (adc_raw[0] + adc_raw_1[0] + adc_raw_2[0]) / 3;
-//			adc_raw_res[1] =  (adc_raw[1] + adc_raw_1[1] + adc_raw_2[1]) / 3;
-//			adc_raw_res[2] =  (adc_raw[2] + adc_raw_1[2] + adc_raw_2[2]) / 3;
-//			
-//			adc_raw_2[0] = adc_raw_1[0];
-//			adc_raw_1[0] = adc_raw[0];
-//			
-//			adc_raw_2[1] = adc_raw_1[1];
-//			adc_raw_1[1] = adc_raw[1];
-//			
-//			adc_raw_2[2] = adc_raw_1[2];
-//			adc_raw_1[2] = adc_raw[2];
-			
+		
 			Angle =  _normalizeAngle(__HAL_TIM_GET_COUNTER(&htim3) * POLEPAIR * _2PI / ELEC_COUNT );
 			 
 #ifdef 		DYN_ADC_SAMPL	
@@ -220,7 +333,6 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
 		  
 		Clarke_out = Clarke_Transform(current);
 		
-
 #ifdef OPENLOOP		 
     Park_out = Park_Transform(Clarke_out, _normalizeAngle(testang)); 		
     testang = testang + 0.005;		 
@@ -228,9 +340,7 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
     Park_out = Park_Transform(Clarke_out, Angle); 		 
 #endif		 
 	
-		
-		 
-		if( speed_Div_count++ >= 15)
+		if( speed_Div_count++ >= 7) //速度环
 		{
 			 speed_Div_count = 0;
 			 
@@ -246,60 +356,57 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
 			{
 				 speed_count = speed_count + ELEC_COUNT;
 			}
-			 
-			 enc_last = enc;
 			
-			Iq_trg = PI_Update(&current_speed_pid, 50, speed_count);
+			EncoderPLL_Update(&encoder_pll, enc);
+			float position_count = encoder_pll.position;
+      float speed_count_s  = encoder_pll.speed;
+      speed_count_tick = EncoderPLL_GetCountPerTick(&encoder_pll);
+			//PLL速度估计
+		
+			 
+			enc_last = enc;
+			//speed_after_filter = LPF2_Update(&speed_filter, speed_count);
+			speed_after_filter = speed_count_tick;
+			//speed_after_filter = speed_count * speed_filter_para + (1 - speed_filter_para) * speed_count_last;
+			//Iq_trg = PI_Update(&current_speed_pid, 50, speed_count);
+			//Iq_trg = PI_Update_Speed(&current_speed_pid, 50, speed_count, speed_count_last,speed_count_last_last, Kd_Speed, speed_count); 
+			Iq_trg = PI_Update_Speed(&current_speed_pid, 50, speed_after_filter, speed_count_last,speed_count_last_last, Kd_Speed, speed_count); 
+			//Iq_trg = PI_Update(&current_speed_pid, 50, speed_after_filter);
+			
+			speed_count_last_last = speed_count_last;
+			speed_count_last = speed_after_filter;
 			
 		}
-		
-//		Iq_trg = 0.1;
-//		Id_trg = 0.0;
 		
 		vd = PI_Update(&PI_Cur_d, Id_trg, Park_out.d);
 		vq = PI_Update(&PI_Cur_q, Iq_trg, Park_out.q);
 		
 		
-//		
-//		float err_q = Iq_trg - Park_out.q;
-//		float err_d = Id_trg - Park_out.d;
-//	  
-//		integ_q +=  err_q;
-//		integ_d +=  err_d;
-//		
-//		if(integ_d > limit)
-//			integ_d = limit;
-//		if(integ_d < -limit)
-//			integ_d = -limit;
-//		
-//			if(integ_q > limit)
-//			integ_q = limit;
-//		if(integ_q < -limit)
-//			integ_q = -limit;
-//		
-//		vq = kptest * err_q + integ_q * kitest;
-//		vd = kptest * err_d + integ_d * kitest;
-//		
-//		if(vd > limit)
-//			vd = limit;
-//		if(vd < -limit)
-//			vd = -limit;
-//		
-//			if(vq > limit)
-//			vq = limit;
-//		if(vq < -limit)
-//			vq = -limit;
-			 
+		/* 有解耦前馈时，先叠加前馈，再滤波 */
+    VoltageLPF_Update(&voltage_filter, &vd, &vq);
+		
+		//电压限幅
+		
+		float UmaxTemp = (vd*vd + vq*vq);
+		
+		if(UmaxTemp > (Umax * Umax))
+		{
+			 float k = Umax / sqrtf(UmaxTemp);
+			 vd = k * vd;
+			 vq = k * vq;
+		}
+		
 		
 #ifdef OPENLOOP		 		
 		setPhaseVoltage(0.0, 1.8, testang);
 #else
 		setPhaseVoltage(vq, vd, Angle); //normal
 #endif
-		 
-		 //
+	   }
     }
 }
+
+
 
 HAL_StatusTypeDef ADC_TestStart(void)
 {

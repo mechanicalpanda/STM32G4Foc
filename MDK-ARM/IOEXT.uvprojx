@@ -809,6 +809,16 @@
               <FileType>5</FileType>
               <FilePath>..\User\FOC.h</FilePath>
             </File>
+            <File>
+              <FileName>PLL.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\User\PLL.c</FilePath>
+            </File>
+            <File>
+              <FileName>PLL.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\User\PLL.h</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

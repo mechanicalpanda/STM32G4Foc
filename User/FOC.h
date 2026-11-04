@@ -73,7 +73,10 @@ Clarke_t Clarke_Transform(ThreePhase_t current) ;
 Park_t Park_Transform(Clarke_t clarke, float theta);
 Clarke_t Inverse_Park_Transform(Park_t park, float theta) ;
 float _normalizeAngle(float angle);
-
+extern const float sqrt3;
 #define  _2PI  (6.28318530717958f)
 #define  _0_5_PI  (1.57079632679f)
+
+#define Udc (24.0f)
+
 #endif

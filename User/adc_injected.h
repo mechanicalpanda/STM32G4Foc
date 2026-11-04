@@ -2,7 +2,7 @@
 #define ADC_INJECTED_H
 
 #include "stm32g4xx_hal.h"
-
+#include "FOC.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -12,12 +12,20 @@ extern "C" {
 #define ADC_TEST_SOFTWARE_TRIGGER 0U
 #endif
 
+typedef struct
+{
+    float x1;
+    float x2;
+    float y1;
+    float y2;
+} LPF2_t;
+
 extern volatile uint32_t count_test;
 extern volatile uint16_t adc_raw[3];
 extern volatile uint32_t adc_test_stage;
 extern volatile HAL_StatusTypeDef adc_test_status;
 extern volatile uint32_t adc_test_error;
-
+extern LPF2_t speed_filter;
 /* Call once after MX_ADC1_Init() and MX_TIM1_Init(), before starting either.
  * Requires TIM1 input clock = 160 MHz. Configures TIM1 base, CH4 and TRGO.
  * Uses CubeMX handles hadc1/htim1 and the existing ADC1_2_IRQHandler.
@@ -63,17 +71,19 @@ void TIM1_ThreePhase_DebugRead(void);
 
 #define ENCODER_COUNT 2500
 #define POLEPAIR      5
-#define ELEC_COUNT (ENCODER_COUNT * 4 - 1)
+#define ELEC_COUNT (ENCODER_COUNT * 4)
 #define MOTOR_MAX_SPEED_RPM 3800
 #define CURRLOOPFREQ 1000
 #define SPEED_LOOP_COUNT (3800 * ELEC_COUNT / 60 / CURRLOOPFREQ)
 
 #define MOTOR_R 0.235
 #define MOTOR_L 0.00027
-#define CUR_LOOP_BW_Hz 1500
+#define CUR_LOOP_BW_Hz 600
 #define KP_cur (MOTOR_L * CUR_LOOP_BW_Hz * 2 * 3.1415926)
 #define KI_cur (MOTOR_R * CUR_LOOP_BW_Hz * 2 * 3.1415926)
 #define Ts_Cur     0.0000625
+
+extern void LPF2_Init(LPF2_t *f, float initial_value);
 typedef struct {
     float Kp;
     float Ki;
@@ -83,6 +93,29 @@ typedef struct {
     float output_limit;
     float output;
 } PI_Controller;
+
+typedef struct
+{
+    float vd;
+    float vq;
+} VoltageLPF_t;
+
+void VoltageLPF_Init(VoltageLPF_t *f,float vd_initial,float vq_initial);
+extern VoltageLPF_t voltage_filter;
+#define VoltRatio 0.95
+
+#define Umax (VoltRatio * Udc / sqrt3)
+
+#define VOLTAGE_LPF_SAMPLE_HZ     16000.0f
+#define VOLTAGE_LPF_BW_HZ         2000.0f
+
+#define VOLTAGE_LPF_TWO_PI        6.28318530718f
+
+#define VOLTAGE_LPF_OMEGA_TS \
+    (VOLTAGE_LPF_TWO_PI * VOLTAGE_LPF_BW_HZ / VOLTAGE_LPF_SAMPLE_HZ)
+
+#define VOLTAGE_LPF_ALPHA \
+    (VOLTAGE_LPF_OMEGA_TS / (1.0f + VOLTAGE_LPF_OMEGA_TS))
 
 #ifdef __cplusplus
 }

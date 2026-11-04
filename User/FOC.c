@@ -35,7 +35,7 @@ volatile uint8_t foc_adc_reconstruction_mode = FOC_ADC_RECONSTRUCT_NONE;
 
 // 母线电压(V), 由 main.c 500Hz 速度环从 ADC PC0 采样+LPF 更新; 初值 24V 避免上电首拍除零。
 // 圆限幅 Vmax 与 SVPWM K 都动态跟随, 电池电压波动时电压合成保持正确。
-volatile float Udc = 24.0f;
+
 
 // 使能TIMx的通道
 void PWM_Init(void)
