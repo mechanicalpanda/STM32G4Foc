@@ -37,7 +37,7 @@ TIM_HandleTypeDef htim1;
 uint8_t receive_buff[256] = {0};
 UART_HandleTypeDef huart1;
 
-#define DATA_COUNT_MAX 4
+#define DATA_COUNT_MAX 1
 typedef struct
 {
     float fdata[DATA_COUNT_MAX];
@@ -301,25 +301,30 @@ int main(void)
 //			test = 0;
 		encoder = (uint32_t)(__HAL_TIM_GET_COUNTER(&htim3));
 		
-		Vofa_packet.fdata[0] = speed_count_tick;
-		Vofa_packet.fdata[1] = speed_after_filter;
-	  Vofa_packet.fdata[2] = speed_count;
-		Vofa_packet.fdata[3] = Park_out.q;
+//		Vofa_packet.fdata[0] = speed_count_tick;
+//		Vofa_packet.fdata[1] = speed_count_tick * 12;
+//	  Vofa_packet.fdata[2] = speed_count;
+//		Vofa_packet.fdata[3] = Park_out.q;
+		
+		  Vofa_packet.fdata[0] = (speed_count_tick * 12);
 		
 //		Vofa_packet.fdata[0] = current.a;
 //		Vofa_packet.fdata[1] = current.b;
 //	  Vofa_packet.fdata[2] = current.c;
+//		Vofa_packet.fdata[3] = (speed_count_tick * 12);
+		
+		//Vofa_packet.fdata[3] = current.a + current.b + current.c;
 //		Vofa_packet.fdata[3] = Park_out.d;
 //		Vofa_packet.fdata[4] = Park_out.q;
-//		Vofa_packet.fdata[5] = (float)(__HAL_TIM_GET_COUNTER(&htim3)) * 0.001;
+//		Vofa_packet.fdata[5] = (speed_count_tick * 12);
 //		//Vofa_packet.fdata[6] = Angle; 
-//		Vofa_packet.fdata[6] = speed_after_filter;
+//		Vofa_packet.fdata[6] = speed_count_tick;
 //		Vofa_packet.fdata[7] = speed_count;
 		//Vofa_packet.fdata[3] = test;
 		Vofa_SendFloat(&Vofa_packet);
 	
     //Direction = __HAL_TIM_IS_TIM_COUNTING_DOWN(&htim3);	
-		//HAL_Delay(10);
+		HAL_Delay(1);
 		//printf_DMA("TEST \r\n");
 		//HAL_UART_Transmit_DMA(&huart1, (const uint8_t *)"TEST", 5);
   }

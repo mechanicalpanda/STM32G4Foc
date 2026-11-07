@@ -269,7 +269,9 @@ uint16_t setPhaseVoltage(float Uq, float Ud, float angle_el)
 	uint16_t Tmax = TcInt;
 	
 	Sort3(&Tmin, &Tmid, &Tmax);
-	 isReSampleAdc = false;
+	isReSampleAdc = false;
+	 
+	 
 	if(Tmin >= AdcSampleTime) //可以在中点进行采样
 	{
 		  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_4, PWM_ARR-1);
@@ -286,6 +288,13 @@ uint16_t setPhaseVoltage(float Uq, float Ud, float angle_el)
 		  sector_sample = sector; //保留相位信息，用于确认电流采样
 		  isReSampleAdc = true;
 		  AdcInjectSel = TWOSAMPLE;
+	}
+	else if((Tmin*2 < (AdcSampleTime + DeathTime + AdcNoiseTime))&&((Tmax - Tmid)>=(AdcSampleTime + DeathTime + AdcNoiseTime))) //采样点移动到中间PWM外部
+	{
+		  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_4, PWM_ARR - Tmax + DeathTime + AdcNoiseTime);
+		  sector_sample = sector; //保留相位信息，用于确认电流采样
+		  isReSampleAdc = true;
+		  AdcInjectSel = TWOSAMPLE_1;
 	}
 	else //无法采样相电流，需要处理
 	{

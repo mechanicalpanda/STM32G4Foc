@@ -20,7 +20,7 @@
 
 #define ADCbitCurrent (0.00671384)
 
-typedef enum{THREESAMPLE, TWOSAMPLE,ADCINVALDE} ADCINJ;
+typedef enum{THREESAMPLE, TWOSAMPLE, TWOSAMPLE_1, ADCINVALDE} ADCINJ;
 extern ADCINJ AdcInjectSel;
 typedef struct {
     float32_t a;

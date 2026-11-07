@@ -10,9 +10,10 @@ extern TIM_HandleTypeDef htim1;
 
 volatile uint32_t count_test = 0U;
 volatile uint16_t adc_raw_res[3] = {0U};
-volatile uint16_t adc_raw[3] = {0U};
-volatile uint16_t adc_raw_1[3] = {0U};
-volatile uint16_t adc_raw_2[3] = {0U};
+
+volatile uint16_t adc_raw_0[3] = {1493U};
+volatile uint16_t adc_raw_1[3] = {1490U};
+volatile uint16_t adc_raw_2[3] = {1493U};
 
 
 /*
@@ -32,9 +33,9 @@ volatile uint32_t adc_test_error = 0U;
 extern uint8_t sector_sample;
 extern bool isReSampleAdc;
 
-uint16_t curr_offset_a = CURRENT_ZERO_OFFSET_ADC;
-uint16_t curr_offset_b = CURRENT_ZERO_OFFSET_ADC;
-uint16_t curr_offset_c = CURRENT_ZERO_OFFSET_ADC;
+uint16_t curr_offset_a = 1493U;
+uint16_t curr_offset_b = 1490U;
+uint16_t curr_offset_c = 1493U;
 
 ThreePhase_t current = {0.0};
 ThreePhase_t current_1 = {0.0};
@@ -77,8 +78,8 @@ PI_Controller PI_Cur_q  = {
 };
 
 PI_Controller current_speed_pid = {
-	  .Kp = 0.05,
-    .Ki = 3.00,
+	  .Kp = 0.1,
+    .Ki = 1.00,
     .Ts = 0.0005,
     .integral = 0.0,
     .integral_limit = 3.0,
@@ -179,7 +180,8 @@ float PI_Update_Speed(PI_Controller *pi, float ref, float feedback, float feedba
         pi->integral = -pi->integral_limit;
 		}
 		
-    pi->output = pi->Kp * error + pi->integral + Kd * (feedback - 2 * feedback_last + feedback_last_last);
+    //pi->output = pi->Kp * error + pi->integral + Kd * (feedback - 2 * feedback_last + feedback_last_last);
+		pi->output = pi->Kp * error + pi->integral + Kd * (feedback -  feedback_last);
 		
     if (pi->output > pi->output_limit)
         pi->output = pi->output_limit;
@@ -212,12 +214,15 @@ float PI_Update_AntiWindup(PI_Controller *pi, float ref, float feedback)
 float vd = 0.0;
 float vq = 0.0;
 
+float vd_pi = 0.0;
+float vq_pi = 0.0;
+
 //#define OPENLOOP
 
 float Id_trg = 0.0;	
 float Iq_trg = 0.2;
 float speed_after_filter = 0.0;
-float Kd_Speed = -0.05;
+float Kd_Speed = -2.0;
 bool isCurrCalib = true;
 int adccount = 0;
 int adc0sum = 0;
@@ -250,16 +255,95 @@ void VoltageLPF_Update(VoltageLPF_t *f,
     *vq = f->vq;
 }
 
+/* 电机参数：相电阻、相电感 */
+#define FOC_PHASE_R_OHM          0.235f
+#define FOC_LD_H                 0.00027f
+#define FOC_LQ_H                 0.00027f
+#define FOC_POLE_PAIRS           5.0f
+#define FOC_ENCODER_CPR          10000.0f
+
+/*
+ * Kt必须对应 Te = Kt * iq 中的iq定义。
+ * 这里沿用FOCTEST的默认值。
+ */
+#define FOC_KT_NM_A              0.05f
+#define FOC_FLUX_WB  (FOC_KT_NM_A / (1.5f * FOC_POLE_PAIRS))
+
+/* 各项补偿开关 */
+#define FOC_R_COMP_ENABLE        0
+#define FOC_CROSS_COMP_ENABLE    0
+#define FOC_EMF_COMP_ENABLE      0
+
+/* 反电动势补偿比例：沿用FOCTEST的20% */
+#define FOC_EMF_COMP_GAIN        0.20f
+
+/*
+ * vd_pi、vq_pi：电流PI输出，V
+ * id、iq：实际dq电流，A
+ * speed_count_s：机械速度，编码器count/s，带方向符号
+ * vd_out、vq_out：叠加前馈后的电压，V
+ */
+void FOC_ApplyFeedforward(float vd_pi,
+                         float vq_pi,
+                         float id,
+                         float iq,
+                         float speed_count_s,
+                         float *vd_out,
+                         float *vq_out)
+{
+    const float omega_e = speed_count_s * (6.28318530718f * FOC_POLE_PAIRS / FOC_ENCODER_CPR);
+
+    float vd_ff = 0.0f;
+    float vq_ff = 0.0f;
+
+#if FOC_R_COMP_ENABLE
+    /* 电阻压降 */
+    vd_ff += FOC_PHASE_R_OHM * id;
+    vq_ff += FOC_PHASE_R_OHM * iq;
+#endif
+
+#if FOC_CROSS_COMP_ENABLE
+    /* dq交叉耦合 */
+    vd_ff -= omega_e * FOC_LQ_H * iq;
+    vq_ff += omega_e * FOC_LD_H * id;
+#endif
+
+#if FOC_EMF_COMP_ENABLE
+    /* q轴反电动势 */
+    vq_ff += FOC_EMF_COMP_GAIN * omega_e * FOC_FLUX_WB;
+#endif
+
+    *vd_out = vd_pi + vd_ff;
+    *vq_out = vq_pi + vq_ff;
+}
+
 void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
 {
     if (hadc->Instance == ADC1)
     {
 			
 			 HAL_GPIO_TogglePin(LED0_GPIO_Port,LED0_Pin);
-				
+			
+//			 adc_raw_0[0] = (uint16_t)HAL_ADCEx_InjectedGetValue(hadc, ADC_INJECTED_RANK_1);
+//			 adc_raw_1[0] = (uint16_t)HAL_ADCEx_InjectedGetValue(hadc, ADC_INJECTED_RANK_2);
+//			 adc_raw_2[0] = (uint16_t)HAL_ADCEx_InjectedGetValue(hadc, ADC_INJECTED_RANK_3);
+//			
+//			 adc_raw_res[0] =  (adc_raw_0[0] +  adc_raw_0[1] +  adc_raw_0[2]) / 3;
+//       adc_raw_res[1] =  (adc_raw_1[0] +  adc_raw_1[1] +  adc_raw_1[2]) / 3;
+//       adc_raw_res[2] =  (adc_raw_2[0] +  adc_raw_2[1] +  adc_raw_2[2]) / 3;
+//			 
+//			adc_raw_0[2] = adc_raw_0[1];
+//			adc_raw_0[1] = adc_raw_0[0];
+//			
+//			adc_raw_1[2] = adc_raw_1[1];
+//			adc_raw_1[1] = adc_raw_1[0];
+//			
+//			adc_raw_2[2] = adc_raw_2[1];
+//			adc_raw_2[1] = adc_raw_2[0];
+			
 			 adc_raw_res[0] = (uint16_t)HAL_ADCEx_InjectedGetValue(hadc, ADC_INJECTED_RANK_1);
-       adc_raw_res[1] = (uint16_t)HAL_ADCEx_InjectedGetValue(hadc, ADC_INJECTED_RANK_2);
-       adc_raw_res[2] = (uint16_t)HAL_ADCEx_InjectedGetValue(hadc, ADC_INJECTED_RANK_3);
+			 adc_raw_res[1] = (uint16_t)HAL_ADCEx_InjectedGetValue(hadc, ADC_INJECTED_RANK_2);
+			 adc_raw_res[2] = (uint16_t)HAL_ADCEx_InjectedGetValue(hadc, ADC_INJECTED_RANK_3);
 			 
 			if(isCurrCalib == false)
 			{
@@ -286,7 +370,7 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
 #ifdef 		DYN_ADC_SAMPL	
 			if(AdcInjectSel == ADCINVALDE)
 			{
-				; //无效的ADC采样值，使用上一次的采样值
+				;//无效的ADC采样值，使用上一次的采样值
 			}
 			else if(AdcInjectSel == THREESAMPLE)
 		  {
@@ -302,8 +386,7 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
 	    current.c = -(adc_raw_res[2] - curr_offset_c) * ADCbitCurrent;
         
 				switch (sector_sample)
-				{
-					
+				{					
 				case SECTOR_1: // 扇区1 重构A
 			  case SECTOR_6: // 扇区6
 				current.a = -(current.b+current.c);	
@@ -316,18 +399,41 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
 				case SECTOR_4: // 扇区4 重构C
 				case SECTOR_5: // 扇区5
 				current.c = -(current.a+current.b);		
+					break;				
+				default:				
 					break;
+			  }
+			}
+			else if(AdcInjectSel == TWOSAMPLE_1)		
+			{		
 				
-				default:
-				
+			current.a = -(adc_raw_res[0] - curr_offset_a) * ADCbitCurrent;
+		  current.b = -(adc_raw_res[1] - curr_offset_b) * ADCbitCurrent;
+	    current.c = -(adc_raw_res[2] - curr_offset_c) * ADCbitCurrent;
+        
+				switch (sector_sample)
+				{					
+				case SECTOR_1: // 扇区1 重构A
+			  case SECTOR_6: // 扇区6
+				current.a = -(current.b+current.c);	
 					break;
-
-			 }
-		 }
+				case SECTOR_2: // 扇区2 重构B
+				case SECTOR_3: // 扇区3
+			  current.b = -(current.a+current.c);	
+					
+					break;
+				case SECTOR_4: // 扇区4 重构C
+				case SECTOR_5: // 扇区5
+				current.c = -(current.a+current.b);		
+					break;				
+				default:				
+					break;
+			  }
+		   }
 #else
-       current.a = (adc_raw[0] - curr_offset_a) * ADCbitCurrent;
-		   current.b = (adc_raw[1] - curr_offset_b) * ADCbitCurrent;
-	     current.c = (adc_raw[2] - curr_offset_c) * ADCbitCurrent;
+       current.a = (adc_raw_res[0] - curr_offset_a) * ADCbitCurrent;
+		   current.b = (adc_raw_res[1] - curr_offset_b) * ADCbitCurrent;
+	     current.c = (adc_raw_res[2] - curr_offset_c) * ADCbitCurrent;
 #endif			
 		
 		  
@@ -378,9 +484,17 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
 			
 		}
 		
-		vd = PI_Update(&PI_Cur_d, Id_trg, Park_out.d);
-		vq = PI_Update(&PI_Cur_q, Iq_trg, Park_out.q);
+		vd_pi = PI_Update(&PI_Cur_d, Id_trg, Park_out.d);
+		vq_pi = PI_Update(&PI_Cur_q, Iq_trg, Park_out.q);
 		
+		/* 2. 叠加前馈：encoder_pll.speed的单位必须是count/s */
+		FOC_ApplyFeedforward(vd_pi,
+												 vq_pi,
+												 Park_out.d,
+												 Park_out.q,
+												 speed_count_tick * 1000,
+												 &vd,
+												 &vq);
 		
 		/* 有解耦前馈时，先叠加前馈，再滤波 */
     VoltageLPF_Update(&voltage_filter, &vd, &vq);
@@ -398,7 +512,7 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
 		
 		
 #ifdef OPENLOOP		 		
-		setPhaseVoltage(0.0, 1.8, testang);
+		setPhaseVoltage(0.0, 0.8, testang);
 #else
 		setPhaseVoltage(vq, vd, Angle); //normal
 #endif
@@ -518,11 +632,8 @@ HAL_StatusTypeDef ADC_TestStart(void)
     injected.ExternalTrigInjecConvEdge =
         ADC_EXTERNALTRIGINJECCONV_EDGE_NONE;
 #else
-    injected.ExternalTrigInjecConv =
-        ADC_EXTERNALTRIGINJEC_T1_TRGO;
-
-    injected.ExternalTrigInjecConvEdge =
-        ADC_EXTERNALTRIGINJECCONV_EDGE_RISING;
+    injected.ExternalTrigInjecConv = ADC_EXTERNALTRIGINJEC_T1_TRGO;
+    injected.ExternalTrigInjecConvEdge = ADC_EXTERNALTRIGINJECCONV_EDGE_RISING;
 #endif
 
     for (i = 0U; i < 3U; i++)
