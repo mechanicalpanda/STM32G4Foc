@@ -81,7 +81,7 @@
           </BeforeMake>
           <AfterMake>
             <RunUserProg1>0</RunUserProg1>
-            <RunUserProg2>1</RunUserProg2>
+            <RunUserProg2>0</RunUserProg2>
             <UserProg1Name></UserProg1Name>
             <UserProg2Name></UserProg2Name>
             <UserProg1Dos16Mode>0</UserProg1Dos16Mode>
@@ -769,6 +769,11 @@
                 </FileArmAds>
               </FileOption>
             </File>
+            <File>
+              <FileName>stm32g4xx_hal_spi.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Drivers\STM32G4xx_HAL_Driver\Src\stm32g4xx_hal_spi.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -818,6 +823,16 @@
               <FileName>PLL.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\User\PLL.h</FilePath>
+            </File>
+            <File>
+              <FileName>Lan9252.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\User\Lan9252.c</FilePath>
+            </File>
+            <File>
+              <FileName>Lan9252.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\User\Lan9252.h</FilePath>
             </File>
           </Files>
         </Group>

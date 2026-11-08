@@ -27,6 +27,7 @@
 #include "adc_injected.h"
 #include "FOC.h"
 #include "PLL.h"
+#include "Lan9252.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -37,7 +38,11 @@ TIM_HandleTypeDef htim1;
 uint8_t receive_buff[256] = {0};
 UART_HandleTypeDef huart1;
 
-#define DATA_COUNT_MAX 1
+//lan9252
+HAL_StatusTypeDef lan_status;
+uint32_t lan_errors = 0;
+
+#define DATA_COUNT_MAX 4
 typedef struct
 {
     float fdata[DATA_COUNT_MAX];
@@ -55,27 +60,7 @@ void Vofa_Init(Vofa_Packet *frame)
 }
 
  uint8_t data[DATA_COUNT_MAX * 4 + 4] = {0};
-void Vofa_SendFloat(Vofa_Packet *packet)
- {
-    uint8_t i;
-    uint32_t temp;
-	 
-		data[DATA_COUNT_MAX * 4 + 4 - 1] = 0x7f;
-	  data[DATA_COUNT_MAX * 4 + 4 - 2] = 0x80;
-		data[DATA_COUNT_MAX * 4 + 4 - 3] = 0x00;
-		data[DATA_COUNT_MAX * 4 + 4 - 4] = 0x00;
-		
-    for(i=0;i<DATA_COUNT_MAX;i++)
-    {
-        temp = *((uint32_t*)&packet->fdata[i]);  // Reinterpret float as Uint32
-        data[0+i*4] = (uint8_t)(temp);
-        data[1+i*4] = (uint8_t)(temp >> 8);
-        data[2+i*4] = (uint8_t)(temp >> 16);
-        data[3+i*4] = (uint8_t)(temp >> 24);
-			 //HAL_UART_Transmit(&huart1, (const uint8_t *)byte, 4, 0xff);
-    }     
-    HAL_UART_Transmit_DMA(&huart1,data,DATA_COUNT_MAX * 4 + 4);
- }
+
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -95,11 +80,36 @@ TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim3;
 
 UART_HandleTypeDef huart1;
+UART_HandleTypeDef huart2;
 DMA_HandleTypeDef hdma_usart1_tx;
 DMA_HandleTypeDef hdma_usart1_rx;
+DMA_HandleTypeDef hdma_usart2_tx;
+DMA_HandleTypeDef hdma_usart2_rx;
 
 /* USER CODE BEGIN PV */
 
+void Vofa_SendFloat(Vofa_Packet *packet)
+ {
+    uint8_t i;
+    uint32_t temp;
+	 
+		data[DATA_COUNT_MAX * 4 + 4 - 1] = 0x7f;
+	  data[DATA_COUNT_MAX * 4 + 4 - 2] = 0x80;
+		data[DATA_COUNT_MAX * 4 + 4 - 3] = 0x00;
+		data[DATA_COUNT_MAX * 4 + 4 - 4] = 0x00;
+		
+    for(i=0;i<DATA_COUNT_MAX;i++)
+    {
+        temp = *((uint32_t*)&packet->fdata[i]);  // Reinterpret float as Uint32
+        data[0+i*4] = (uint8_t)(temp);
+        data[1+i*4] = (uint8_t)(temp >> 8);
+        data[2+i*4] = (uint8_t)(temp >> 16);
+        data[3+i*4] = (uint8_t)(temp >> 24);
+			 //HAL_UART_Transmit(&huart1, (const uint8_t *)byte, 4, 0xff);
+    }     
+    HAL_UART_Transmit_DMA(&huart2,data,DATA_COUNT_MAX * 4 + 4);
+ }
+ 
 int fputc(int ch, FILE * f)
 {
 	HAL_UART_Transmit_DMA(&huart1, (uint8_t*)&ch, 1);
@@ -131,6 +141,7 @@ static void MX_USART1_UART_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_TIM3_Init(void);
+static void MX_USART2_UART_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -147,7 +158,7 @@ void Debug_print(const char* buf, ...)
   HAL_UART_Transmit(&huart1, (const uint8_t *)str, strlen(str), 0xff);
   va_end(v);
 }
-uint8_t _dbg_Buff[150];
+uint8_t _dbg_Buff[1500];
 void printf_DMA(const char *format,...)
   {
     uint32_t length;
@@ -173,12 +184,40 @@ extern int speed_count;
 extern volatile uint16_t adc_raw[3];
 extern float speed_after_filter;
 extern float speed_count_tick;
+extern float vq_ff;
 /* USER CODE END 0 */
 
 /**
   * @brief  The application entry point.
   * @retval int
   */
+
+#define ECAT_GPIO_CONTINUITY_TEST 0
+volatile uint32_t ecat_gpio_test_level = 0;
+volatile uint32_t ecat_gpio_test_cycles = 0;
+/* Disconnect LAN9252 outputs before this PUSH-PULL continuity test. */
+static void ECAT_GPIO_ContinuityTest(void)
+{
+ GPIO_InitTypeDef g = {0};
+ __HAL_RCC_GPIOB_CLK_ENABLE();
+ __HAL_RCC_GPIOC_CLK_ENABLE();
+ __HAL_RCC_GPIOD_CLK_ENABLE();
+ HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3|GPIO_PIN_4|GPIO_PIN_5, GPIO_PIN_RESET);
+ HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6|GPIO_PIN_7, GPIO_PIN_RESET);
+ HAL_GPIO_WritePin(GPIOD, GPIO_PIN_8|GPIO_PIN_9|GPIO_PIN_10, GPIO_PIN_RESET);
+ g.Mode=GPIO_MODE_OUTPUT_PP; g.Pull=GPIO_NOPULL; g.Speed=GPIO_SPEED_FREQ_LOW;
+ g.Pin=GPIO_PIN_3|GPIO_PIN_4|GPIO_PIN_5; HAL_GPIO_Init(GPIOB,&g);
+ g.Pin=GPIO_PIN_6|GPIO_PIN_7; HAL_GPIO_Init(GPIOC,&g);
+ g.Pin=GPIO_PIN_8|GPIO_PIN_9|GPIO_PIN_10; HAL_GPIO_Init(GPIOD,&g);
+ for (;;) {
+  HAL_Delay(2000);
+  HAL_GPIO_TogglePin(GPIOB,GPIO_PIN_3|GPIO_PIN_4|GPIO_PIN_5);
+  HAL_GPIO_TogglePin(GPIOC,GPIO_PIN_6|GPIO_PIN_7);
+  HAL_GPIO_TogglePin(GPIOD,GPIO_PIN_8|GPIO_PIN_9|GPIO_PIN_10);
+  ecat_gpio_test_level ^= 1U; ++ecat_gpio_test_cycles;
+ }
+}
+
 int main(void)
 {
 
@@ -197,6 +236,9 @@ int main(void)
 
   /* Configure the system clock */
   SystemClock_Config();
+#if ECAT_GPIO_CONTINUITY_TEST
+  ECAT_GPIO_ContinuityTest();
+#endif
 
   /* USER CODE BEGIN SysInit */
 
@@ -209,12 +251,26 @@ int main(void)
   MX_ADC1_Init();
   MX_TIM1_Init();
   MX_TIM3_Init();
+  MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
   __HAL_UART_ENABLE_IT(&huart1, UART_IT_IDLE);
 	HAL_UART_Receive_DMA(&huart1, (uint8_t*)receive_buff, 255); 
 	Vofa_Init(&Vofa_packet);
+	
+	//lan init
+	lan_status = LAN9252_Init();
 
-	uint8_t _dbg_Buff[150];
+	if (lan_status == HAL_OK)
+	{
+		  HAL_UART_Transmit_DMA(&huart2, (const uint8_t *)"LANOK", 6);
+			lan_status = LAN9252_SelfTest(10000U, &lan_errors);
+	}
+	else
+	{
+		  HAL_UART_Transmit_DMA(&huart2, (const uint8_t *)"LANBAD", 7);
+	}
+
+//	uint8_t _dbg_Buff[1500];
 	
 //	adc_test_status = ADC_TestStart();
 
@@ -305,12 +361,12 @@ int main(void)
 //		Vofa_packet.fdata[1] = speed_count_tick * 12;
 //	  Vofa_packet.fdata[2] = speed_count;
 //		Vofa_packet.fdata[3] = Park_out.q;
-		
-		  Vofa_packet.fdata[0] = (speed_count_tick * 12);
-		
+//		
+//		  Vofa_packet.fdata[0] = (speed_count_tick * 12);
+//		
 //		Vofa_packet.fdata[0] = current.a;
-//		Vofa_packet.fdata[1] = current.b;
-//	  Vofa_packet.fdata[2] = current.c;
+//		Vofa_packet.fdata[1] = Park_out.q;
+//	  Vofa_packet.fdata[2] = vq_ff;
 //		Vofa_packet.fdata[3] = (speed_count_tick * 12);
 		
 		//Vofa_packet.fdata[3] = current.a + current.b + current.c;
@@ -321,12 +377,12 @@ int main(void)
 //		Vofa_packet.fdata[6] = speed_count_tick;
 //		Vofa_packet.fdata[7] = speed_count;
 		//Vofa_packet.fdata[3] = test;
-		Vofa_SendFloat(&Vofa_packet);
+//		Vofa_SendFloat(&Vofa_packet);
 	
     //Direction = __HAL_TIM_IS_TIM_COUNTING_DOWN(&htim3);	
-		HAL_Delay(1);
+		//HAL_Delay(1);
 		//printf_DMA("TEST \r\n");
-		//HAL_UART_Transmit_DMA(&huart1, (const uint8_t *)"TEST", 5);
+		//HAL_UART_Transmit_DMA(&huart2, (const uint8_t *)"TEST", 5);
   }
   /* USER CODE END 3 */
 }
@@ -543,7 +599,7 @@ static void MX_TIM1_Init(void)
   sBreakDeadTimeConfig.OffStateRunMode = TIM_OSSR_DISABLE;
   sBreakDeadTimeConfig.OffStateIDLEMode = TIM_OSSI_DISABLE;
   sBreakDeadTimeConfig.LockLevel = TIM_LOCKLEVEL_OFF;
-  sBreakDeadTimeConfig.DeadTime = 32;
+  sBreakDeadTimeConfig.DeadTime = 96;
   sBreakDeadTimeConfig.BreakState = TIM_BREAK_DISABLE;
   sBreakDeadTimeConfig.BreakPolarity = TIM_BREAKPOLARITY_HIGH;
   sBreakDeadTimeConfig.BreakFilter = 0;
@@ -662,6 +718,54 @@ static void MX_USART1_UART_Init(void)
 }
 
 /**
+  * @brief USART2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART2_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART2_Init 0 */
+
+  /* USER CODE END USART2_Init 0 */
+
+  /* USER CODE BEGIN USART2_Init 1 */
+
+  /* USER CODE END USART2_Init 1 */
+  huart2.Instance = USART2;
+  huart2.Init.BaudRate = 4000000;
+  huart2.Init.WordLength = UART_WORDLENGTH_8B;
+  huart2.Init.StopBits = UART_STOPBITS_1;
+  huart2.Init.Parity = UART_PARITY_NONE;
+  huart2.Init.Mode = UART_MODE_TX_RX;
+  huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart2.Init.OverSampling = UART_OVERSAMPLING_16;
+  huart2.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
+  huart2.Init.ClockPrescaler = UART_PRESCALER_DIV1;
+  huart2.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
+  if (HAL_UART_Init(&huart2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_UARTEx_SetTxFifoThreshold(&huart2, UART_TXFIFO_THRESHOLD_1_8) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_UARTEx_SetRxFifoThreshold(&huart2, UART_RXFIFO_THRESHOLD_1_8) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_UARTEx_DisableFifoMode(&huart2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART2_Init 2 */
+
+  /* USER CODE END USART2_Init 2 */
+
+}
+
+/**
   * Enable DMA controller clock
   */
 static void MX_DMA_Init(void)
@@ -678,6 +782,12 @@ static void MX_DMA_Init(void)
   /* DMA1_Channel2_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA1_Channel2_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel2_IRQn);
+  /* DMA1_Channel3_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel3_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel3_IRQn);
+  /* DMA1_Channel4_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel4_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel4_IRQn);
 
 }
 
@@ -698,6 +808,7 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOE_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
+  __HAL_RCC_GPIOD_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(PM1_CTRL_SD_GPIO_Port, PM1_CTRL_SD_Pin, GPIO_PIN_RESET);

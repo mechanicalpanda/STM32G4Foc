@@ -272,7 +272,7 @@ void VoltageLPF_Update(VoltageLPF_t *f,
 /* 各项补偿开关 */
 #define FOC_R_COMP_ENABLE        0
 #define FOC_CROSS_COMP_ENABLE    0
-#define FOC_EMF_COMP_ENABLE      0
+#define FOC_EMF_COMP_ENABLE      1
 
 /* 反电动势补偿比例：沿用FOCTEST的20% */
 #define FOC_EMF_COMP_GAIN        0.20f
@@ -283,6 +283,10 @@ void VoltageLPF_Update(VoltageLPF_t *f,
  * speed_count_s：机械速度，编码器count/s，带方向符号
  * vd_out、vq_out：叠加前馈后的电压，V
  */
+ 
+float vd_ff = 0.0f;
+float vq_ff = 0.0f; 
+
 void FOC_ApplyFeedforward(float vd_pi,
                          float vq_pi,
                          float id,
@@ -293,8 +297,8 @@ void FOC_ApplyFeedforward(float vd_pi,
 {
     const float omega_e = speed_count_s * (6.28318530718f * FOC_POLE_PAIRS / FOC_ENCODER_CPR);
 
-    float vd_ff = 0.0f;
-    float vq_ff = 0.0f;
+//    float vd_ff = 0.0f;
+//    float vq_ff = 0.0f;
 
 #if FOC_R_COMP_ENABLE
     /* 电阻压降 */
@@ -310,11 +314,14 @@ void FOC_ApplyFeedforward(float vd_pi,
 
 #if FOC_EMF_COMP_ENABLE
     /* q轴反电动势 */
-    vq_ff += FOC_EMF_COMP_GAIN * omega_e * FOC_FLUX_WB;
+//    vq_ff = FOC_EMF_COMP_GAIN * omega_e * FOC_FLUX_WB;
 #endif
 
     *vd_out = vd_pi + vd_ff;
     *vq_out = vq_pi + vq_ff;
+		
+//		 *vd_out = vd_pi;
+//     *vq_out = vq_pi;
 }
 
 void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
@@ -404,32 +411,32 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
 					break;
 			  }
 			}
-			else if(AdcInjectSel == TWOSAMPLE_1)		
-			{		
-				
-			current.a = -(adc_raw_res[0] - curr_offset_a) * ADCbitCurrent;
-		  current.b = -(adc_raw_res[1] - curr_offset_b) * ADCbitCurrent;
-	    current.c = -(adc_raw_res[2] - curr_offset_c) * ADCbitCurrent;
-        
-				switch (sector_sample)
-				{					
-				case SECTOR_1: // 扇区1 重构A
-			  case SECTOR_6: // 扇区6
-				current.a = -(current.b+current.c);	
-					break;
-				case SECTOR_2: // 扇区2 重构B
-				case SECTOR_3: // 扇区3
-			  current.b = -(current.a+current.c);	
-					
-					break;
-				case SECTOR_4: // 扇区4 重构C
-				case SECTOR_5: // 扇区5
-				current.c = -(current.a+current.b);		
-					break;				
-				default:				
-					break;
-			  }
-		   }
+//			else if(AdcInjectSel == TWOSAMPLE_1)		
+//			{		
+//				
+//			current.a = -(adc_raw_res[0] - curr_offset_a) * ADCbitCurrent;
+//		  current.b = -(adc_raw_res[1] - curr_offset_b) * ADCbitCurrent;
+//	    current.c = -(adc_raw_res[2] - curr_offset_c) * ADCbitCurrent;
+//        
+//				switch (sector_sample)
+//				{					
+//				case SECTOR_1: // 扇区1 重构A
+//			  case SECTOR_6: // 扇区6
+//				current.a = -(current.b+current.c);	
+//					break;
+//				case SECTOR_2: // 扇区2 重构B
+//				case SECTOR_3: // 扇区3
+//			  current.b = -(current.a+current.c);	
+//					
+//					break;
+//				case SECTOR_4: // 扇区4 重构C
+//				case SECTOR_5: // 扇区5
+//				current.c = -(current.a+current.b);		
+//					break;				
+//				default:				
+//					break;
+//			  }
+//		   }
 #else
        current.a = (adc_raw_res[0] - curr_offset_a) * ADCbitCurrent;
 		   current.b = (adc_raw_res[1] - curr_offset_b) * ADCbitCurrent;
@@ -476,7 +483,12 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
 			//speed_after_filter = speed_count * speed_filter_para + (1 - speed_filter_para) * speed_count_last;
 			//Iq_trg = PI_Update(&current_speed_pid, 50, speed_count);
 			//Iq_trg = PI_Update_Speed(&current_speed_pid, 50, speed_count, speed_count_last,speed_count_last_last, Kd_Speed, speed_count); 
-			Iq_trg = PI_Update_Speed(&current_speed_pid, 50, speed_after_filter, speed_count_last,speed_count_last_last, Kd_Speed, speed_count); 
+			
+			
+			//Iq_trg = PI_Update_Speed(&current_speed_pid, 50, speed_after_filter, speed_count_last,speed_count_last_last, Kd_Speed, speed_count); 
+				Iq_trg = PI_Update_Speed(&current_speed_pid, 50, speed_after_filter, speed_count_last,speed_count_last_last, Kd_Speed, speed_after_filter); 
+			
+			
 			//Iq_trg = PI_Update(&current_speed_pid, 50, speed_after_filter);
 			
 			speed_count_last_last = speed_count_last;
@@ -492,7 +504,7 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
 												 vq_pi,
 												 Park_out.d,
 												 Park_out.q,
-												 speed_count_tick * 1000,
+												 encoder_pll.speed ,
 												 &vd,
 												 &vq);
 		

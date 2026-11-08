@@ -268,6 +268,11 @@ uint16_t setPhaseVoltage(float Uq, float Ud, float angle_el)
 	uint16_t Tmid = TbInt;
 	uint16_t Tmax = TcInt;
 	
+	if((TaInt >= AdcSampleTime)&&(TbInt >= AdcSampleTime)&&(TcInt >= AdcSampleTime)) //可以在中间进行采样， 三相电流不用重构
+	{
+		
+	}
+	
 	Sort3(&Tmin, &Tmid, &Tmax);
 	isReSampleAdc = false;
 	 
