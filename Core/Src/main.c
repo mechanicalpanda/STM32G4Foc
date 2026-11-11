@@ -190,6 +190,7 @@ extern float speed_after_filter;
 extern float speed_count_tick;
 extern float vq_ff;
 uint32_t value = 0;
+uint32_t value_CSR = 0;
 /* USER CODE END 0 */
 
 /**
@@ -236,6 +237,9 @@ int main(void)
 	//lan init
 	
   HAL_StatusTypeDef ret = LAN9252_ReadReg(0x0064, &value);
+	
+//	ret = LAN9252_CSR_Read(0x0E02, 2, &value_CSR);
+
 //	lan_status = LAN9252_Init();
 
 //	if (lan_status == HAL_OK)
