@@ -30,6 +30,48 @@ HAL_StatusTypeDef LAN9252_Write32(uint16_t address, uint32_t value);
 HAL_StatusTypeDef LAN9252_WaitReady(uint32_t timeout_ms);
 /* Repeated BYTE_TEST check; returns HAL_ERROR on a mismatch. */
 HAL_StatusTypeDef LAN9252_SelfTest(uint32_t repetitions, uint32_t *errors);
+
+/* CSR test stages: 1=identity, 2=chip ID, 3=repeat reads, 4=AL status,
+ * 5=passed. Run before the control interrupts / SSC, never concurrently. */
+typedef struct {
+    uint32_t stage;
+    uint32_t identity;
+    uint32_t chip_id;
+    uint32_t al_status;
+    uint32_t completed;
+    uint32_t read_errors;
+    uint32_t mismatch_count;
+    uint32_t last_command;
+    HAL_StatusTypeDef status;
+} LAN9252_CSR_Debug_t;
+extern volatile LAN9252_CSR_Debug_t lan9252_csr_debug;
+HAL_StatusTypeDef LAN9252_CSR_Read(uint16_t address, uint8_t length, uint32_t *value);
+HAL_StatusTypeDef LAN9252_CSR_SelfTest(void);
+
+/* Write test stages: 1=save, 2=pattern A, 3=pattern B, 4=restore,
+ * 5=passed. failed_stage preserves the first failure; restore is always tried
+ * after a write attempt. No SSC/master may access the ESC during this test. */
+typedef struct {
+ uint32_t stage, failed_stage, address, original, expected, readback;
+ uint32_t restored_value, mismatch_count, restore_verified;
+ HAL_StatusTypeDef test_status, restore_status;
+} LAN9252_CSR_WriteDebug_t;
+extern volatile LAN9252_CSR_WriteDebug_t lan9252_csr_write_debug;
+HAL_StatusTypeDef LAN9252_CSR_Write(uint16_t address, uint8_t length, uint32_t value);
+HAL_StatusTypeDef LAN9252_CSR_WriteSelfTest(void);
+
+/* Blocking non-reentrant PRAM API; RAM addresses 0x1000..0x1FFF.
+ * Startup self-test only: no SSC/master access to this RAM while testing. */
+typedef struct {
+ uint32_t stage, failed_stage, test_case, address, length, completed;
+ uint32_t mismatch_count, first_error_offset, expected, actual;
+ uint32_t last_command, restore_verified;
+ HAL_StatusTypeDef test_status, restore_status;
+} LAN9252_PRAM_Debug_t;
+extern volatile LAN9252_PRAM_Debug_t lan9252_pram_debug;
+HAL_StatusTypeDef LAN9252_PRAM_Read(uint16_t address, uint8_t *buffer, uint16_t length);
+HAL_StatusTypeDef LAN9252_PRAM_Write(uint16_t address, const uint8_t *buffer, uint16_t length);
+HAL_StatusTypeDef LAN9252_PRAM_SelfTest(void);
 #ifdef __cplusplus
 }
 #endif

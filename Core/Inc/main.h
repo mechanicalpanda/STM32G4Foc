@@ -73,6 +73,10 @@ void Error_Handler(void);
 #define KEY2_Pin GPIO_PIN_14
 #define KEY2_GPIO_Port GPIOE
 #define KEY2_EXTI_IRQn EXTI15_10_IRQn
+#define LAN9252_INT_Pin GPIO_PIN_8
+#define LAN9252_INT_GPIO_Port GPIOD
+#define SPI1_CS_Pin GPIO_PIN_10
+#define SPI1_CS_GPIO_Port GPIOD
 #define LED0_Pin GPIO_PIN_0
 #define LED0_GPIO_Port GPIOE
 #define LED1_Pin GPIO_PIN_1

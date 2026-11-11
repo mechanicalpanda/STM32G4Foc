@@ -1,10 +1,10 @@
-﻿#include "Lan9252.h"
+#include "Lan9252.h"
 
 #ifndef HAL_SPI_MODULE_ENABLED
 #error "Enable HAL_SPI_MODULE_ENABLED in stm32g4xx_hal_conf.h and add stm32g4xx_hal_spi.c to the project"
 #endif
 
-SPI_HandleTypeDef hspi1;
+extern SPI_HandleTypeDef hspi1;
 volatile LAN9252_Debug_t lan9252_debug;
 #define CS_LOW()  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_10, GPIO_PIN_RESET)
 #define CS_HIGH() HAL_GPIO_WritePin(GPIOD, GPIO_PIN_10, GPIO_PIN_SET)
@@ -152,4 +152,358 @@ HAL_StatusTypeDef LAN9252_SelfTest(uint32_t repetitions, uint32_t *errors)
     }
     *errors = count;
     return count == 0U ? HAL_OK : HAL_ERROR;
+}
+
+
+#define LAN_CSR_DATA 0x0300U
+#define LAN_CSR_CMD  0x0304U
+#define LAN_CSR_BUSY (1UL << 31)
+#define LAN_CSR_READ (1UL << 30)
+#define LAN_CSR_TIMEOUT_MS 20U
+volatile LAN9252_CSR_Debug_t lan9252_csr_debug;
+
+static HAL_StatusTypeDef LAN9252_CSR_WaitIdle(void)
+{
+    uint32_t command, start = HAL_GetTick();
+    HAL_StatusTypeDef status;
+    do {
+        status = LAN9252_Read32(LAN_CSR_CMD, &command);
+        if (status != HAL_OK) return status;
+        lan9252_csr_debug.last_command = command;
+        if ((command & LAN_CSR_BUSY) == 0U) return HAL_OK;
+    } while ((HAL_GetTick() - start) < LAN_CSR_TIMEOUT_MS);
+    return HAL_TIMEOUT;
+}
+
+HAL_StatusTypeDef LAN9252_CSR_Read(uint16_t address, uint8_t length, uint32_t *value)
+{
+    HAL_StatusTypeDef status;
+    uint32_t data;
+    /* Deliberately restrict API to aligned 1/2/4-byte ESC register accesses.
+       Process RAM must use the PRAM interface. */
+    if (value == NULL || address >= 0x1000U ||
+        (length != 1U && length != 2U && length != 4U) ||
+        (address & (length - 1U)) != 0U ||
+        (uint32_t)address + length > 0x1000U) return HAL_ERROR;
+    status = LAN9252_CSR_WaitIdle();
+    if (status != HAL_OK) return status;
+    status = LAN9252_Write32(LAN_CSR_CMD, LAN_CSR_BUSY | LAN_CSR_READ |
+                             ((uint32_t)length << 16) | address);
+    if (status != HAL_OK) return status;
+    status = LAN9252_CSR_WaitIdle();
+    if (status != HAL_OK) return status;
+    status = LAN9252_Read32(LAN_CSR_DATA, &data);
+    if (status == HAL_OK) {
+        if (length == 1U) data &= 0xFFU;
+        else if (length == 2U) data &= 0xFFFFU;
+        *value = data;
+    }
+    return status;
+}
+
+HAL_StatusTypeDef LAN9252_CSR_SelfTest(void)
+{
+    uint32_t value = 0;
+    HAL_StatusTypeDef status;
+    lan9252_csr_debug.stage = 1U;
+    lan9252_csr_debug.identity = 0U;
+    lan9252_csr_debug.chip_id = 0U;
+    lan9252_csr_debug.al_status = 0U;
+    lan9252_csr_debug.completed = 0U;
+    lan9252_csr_debug.read_errors = 0U;
+    lan9252_csr_debug.mismatch_count = 0U;
+    status = LAN9252_CSR_Read(0x0000U, 4U, &value);
+    if (status != HAL_OK) goto failed;
+    lan9252_csr_debug.identity = value;
+    lan9252_csr_debug.stage = 2U;
+    /* LAN9252 product ID is at ESC 0x0E02 (16 bits). */
+    status = LAN9252_CSR_Read(0x0E00U, 4U, &value);
+    if (status != HAL_OK) goto failed;
+    lan9252_csr_debug.chip_id = value;
+    if ((value >> 16) != 0x9252U) { status = HAL_ERROR; goto failed; }
+    lan9252_csr_debug.stage = 3U;
+    for (uint32_t i = 0U; i < 1000U; ++i) {
+        status = LAN9252_CSR_Read(0x0000U, 4U, &value);
+        if (status != HAL_OK) goto failed;
+        ++lan9252_csr_debug.completed;
+        if (value != lan9252_csr_debug.identity) ++lan9252_csr_debug.mismatch_count;
+    }
+    if (lan9252_csr_debug.mismatch_count != 0U) { status = HAL_ERROR; goto failed; }
+    lan9252_csr_debug.stage = 4U;
+    status = LAN9252_CSR_Read(0x0130U, 4U, &value);
+    if (status != HAL_OK) goto failed;
+    lan9252_csr_debug.al_status = value & 0xFFFFU;
+    lan9252_csr_debug.stage = 5U;
+    lan9252_csr_debug.status = HAL_OK;
+    return HAL_OK;
+failed:
+    if (status == HAL_TIMEOUT || status == HAL_BUSY ||
+        (status == HAL_ERROR && lan9252_csr_debug.stage != 2U &&
+         lan9252_csr_debug.mismatch_count == 0U)) ++lan9252_csr_debug.read_errors;
+    lan9252_csr_debug.status = status;
+    return status;
+}
+
+
+volatile LAN9252_CSR_WriteDebug_t lan9252_csr_write_debug;
+HAL_StatusTypeDef LAN9252_CSR_Write(uint16_t address, uint8_t length, uint32_t value)
+{
+ HAL_StatusTypeDef status;
+ if (address >= 0x1000U || (length != 1U && length != 2U && length != 4U) ||
+     (address & (length - 1U)) != 0U || (uint32_t)address + length > 0x1000U)
+     return HAL_ERROR;
+ status = LAN9252_CSR_WaitIdle();
+ if (status != HAL_OK) return status;
+ if (length == 1U) value &= 0xFFU;
+ else if (length == 2U) value &= 0xFFFFU;
+ status = LAN9252_Write32(LAN_CSR_DATA, value);
+ if (status != HAL_OK) return status;
+ status = LAN9252_Write32(LAN_CSR_CMD, LAN_CSR_BUSY | ((uint32_t)length << 16) | address);
+ if (status != HAL_OK) return status;
+ return LAN9252_CSR_WaitIdle();
+}
+
+HAL_StatusTypeDef LAN9252_CSR_WriteSelfTest(void)
+{
+ const uint16_t address = 0x0204U; /* AL Event Mask: ordinary PDI R/W. */
+ const uint32_t test_mask = 1UL; /* AL Control event mapping only. */
+ uint32_t original = 0U, value = 0U;
+ uint32_t irq_enabled = EXTI->IMR1 & GPIO_PIN_8;
+ HAL_StatusTypeDef status, restore;
+ lan9252_csr_write_debug.stage = 1U;
+ lan9252_csr_write_debug.failed_stage = 0U;
+ lan9252_csr_write_debug.address = address;
+ lan9252_csr_write_debug.original = 0U;
+ lan9252_csr_write_debug.expected = 0U;
+ lan9252_csr_write_debug.readback = 0U;
+ lan9252_csr_write_debug.restored_value = 0U;
+ lan9252_csr_write_debug.mismatch_count = 0U;
+ lan9252_csr_write_debug.restore_verified = 0U;
+ lan9252_csr_write_debug.test_status = HAL_BUSY;
+ lan9252_csr_write_debug.restore_status = HAL_BUSY; /* not attempted */
+ CLEAR_BIT(EXTI->IMR1, GPIO_PIN_8);
+ status = LAN9252_CSR_Read(address, 4U, &original);
+ if (status != HAL_OK) goto no_write;
+ lan9252_csr_write_debug.original = original;
+ for (uint32_t i = 0U; i < 2U; ++i) {
+     uint32_t expected = (i == 0U) ? (original ^ test_mask) : original;
+     lan9252_csr_write_debug.stage = 2U + i;
+     lan9252_csr_write_debug.expected = expected;
+     status = LAN9252_CSR_Write(address, 4U, expected);
+     if (status != HAL_OK) goto restore_original;
+     status = LAN9252_CSR_Read(address, 4U, &value);
+     if (status != HAL_OK) goto restore_original;
+     lan9252_csr_write_debug.readback = value;
+     if (value != expected) {
+         ++lan9252_csr_write_debug.mismatch_count;
+         status = HAL_ERROR;
+         goto restore_original;
+     }
+ }
+restore_original:
+ lan9252_csr_write_debug.test_status = status;
+ if (status != HAL_OK) lan9252_csr_write_debug.failed_stage = lan9252_csr_write_debug.stage;
+ lan9252_csr_write_debug.stage = 4U;
+ /* Even a timed-out write could have completed: always attempt restoration. */
+ restore = LAN9252_CSR_Write(address, 4U, original);
+ if (restore == HAL_OK) {
+     restore = LAN9252_CSR_Read(address, 4U, &value);
+     if (restore == HAL_OK) {
+         lan9252_csr_write_debug.restored_value = value;
+         if (value != original) restore = HAL_ERROR;
+         else lan9252_csr_write_debug.restore_verified = 1U;
+     }
+ }
+ lan9252_csr_write_debug.restore_status = restore;
+ if (restore != HAL_OK) {
+     if (lan9252_csr_write_debug.failed_stage == 0U) lan9252_csr_write_debug.failed_stage = 4U;
+     /* Leave EXTI8 masked if the IRQ mask could not be restored. */
+     return restore;
+ }
+ if (status == HAL_OK) lan9252_csr_write_debug.stage = 5U;
+ if (irq_enabled != 0U) SET_BIT(EXTI->IMR1, GPIO_PIN_8);
+ return status;
+no_write:
+ lan9252_csr_write_debug.failed_stage = 1U;
+ lan9252_csr_write_debug.test_status = status;
+ if (irq_enabled != 0U) SET_BIT(EXTI->IMR1, GPIO_PIN_8);
+ return status;
+}
+
+
+#define PRAM_BUSY (1UL << 31)
+#define PRAM_ABORT (1UL << 30)
+#define PRAM_TIMEOUT_MS 100U
+volatile LAN9252_PRAM_Debug_t lan9252_pram_debug;
+
+static HAL_StatusTypeDef PRAM_Wait(uint16_t cmd, uint32_t start, uint8_t idle)
+{
+ uint32_t v;
+ HAL_StatusTypeDef st;
+ do {
+  st = LAN9252_Read32(cmd, &v);
+  if (st != HAL_OK) return st;
+  lan9252_pram_debug.last_command = v;
+  if (idle) { if (!(v & PRAM_BUSY)) return HAL_OK; }
+  else if ((v & 1U) && ((v >> 8) & 0x1FU)) return HAL_OK;
+ } while ((HAL_GetTick() - start) < PRAM_TIMEOUT_MS);
+ return HAL_TIMEOUT;
+}
+
+static HAL_StatusTypeDef PRAM_Transfer(uint16_t address, uint8_t *rd,
+ const uint8_t *wr, uint16_t length)
+{
+ uint16_t cmd = wr ? 0x0314U : 0x030CU;
+ uint16_t addr_len = wr ? 0x0310U : 0x0308U;
+ uint16_t fifo = wr ? 0x0020U : 0x0000U;
+ uint32_t start = HAL_GetTick(), word, offset = address & 3U, done = 0U;
+ HAL_StatusTypeDef st;
+ if (address < 0x1000U || (uint32_t)address + length > 0x2000U ||
+     (length && !rd && !wr)) return HAL_ERROR;
+ if (length == 0U) return HAL_OK;
+ st = LAN9252_Write32(cmd, PRAM_ABORT);
+ if (st != HAL_OK) return st;
+ st = PRAM_Wait(cmd, start, 1U);
+ if (st != HAL_OK) goto fail;
+ st = LAN9252_Write32(addr_len, ((uint32_t)length << 16) | address);
+ if (st != HAL_OK) goto fail;
+ st = LAN9252_Write32(cmd, PRAM_BUSY);
+ if (st != HAL_OK) goto fail;
+ while (done < length) {
+  uint32_t n = 4U - offset;
+  if (n > length - done) n = length - done;
+  /* Conservative implementation: recheck availability before every DWORD.
+     FIFO addresses are aliased; each access pops/pushes one DWORD. */
+  st = PRAM_Wait(cmd, start, 0U);
+  if (st != HAL_OK) goto fail;
+  if (wr) {
+   word = 0U;
+   for (uint32_t j = 0U; j < n; ++j)
+    word |= (uint32_t)wr[done + j] << (8U * (offset + j));
+   st = LAN9252_Write32(fifo, word);
+  } else {
+   st = LAN9252_Read32(fifo, &word);
+   if (st == HAL_OK)
+    for (uint32_t j = 0U; j < n; ++j)
+     rd[done + j] = (uint8_t)(word >> (8U * (offset + j)));
+  }
+  if (st != HAL_OK) goto fail;
+  done += n; offset = 0U;
+ }
+ st = PRAM_Wait(cmd, start, 1U);
+ if (st == HAL_OK) return st;
+fail:
+ /* Best effort abort; preserve original error. */
+ (void)LAN9252_Write32(cmd, PRAM_ABORT);
+ return st;
+}
+
+HAL_StatusTypeDef LAN9252_PRAM_Read(uint16_t address, uint8_t *buffer, uint16_t length)
+{
+ if (length && buffer == NULL) return HAL_ERROR;
+ return PRAM_Transfer(address, buffer, NULL, length);
+}
+HAL_StatusTypeDef LAN9252_PRAM_Write(uint16_t address, const uint8_t *buffer, uint16_t length)
+{
+ if (length && buffer == NULL) return HAL_ERROR;
+ return PRAM_Transfer(address, NULL, buffer, length);
+}
+
+/* Reserve 0x1800..0x1907 for this startup test. Save and restore all 264 bytes,
+ * including guards. Do not run once SyncManagers/master use process RAM. */
+#define PRAM_TEST_BASE 0x1800U
+#define PRAM_TEST_SIZE 264U
+static uint8_t pram_saved[PRAM_TEST_SIZE];
+static uint8_t pram_expected[PRAM_TEST_SIZE];
+static uint8_t pram_actual[PRAM_TEST_SIZE];
+
+HAL_StatusTypeDef LAN9252_PRAM_SelfTest(void)
+{
+ static const uint16_t offsets[4] = {4U, 4U, 5U, 7U};
+ static const uint16_t lengths[4] = {16U, 256U, 17U, 253U};
+ HAL_StatusTypeDef st, restore;
+ uint32_t irq = EXTI->IMR1 & GPIO_PIN_8;
+ lan9252_pram_debug.stage = 1U;
+ lan9252_pram_debug.failed_stage = 0U;
+ lan9252_pram_debug.test_case = 0U;
+ lan9252_pram_debug.address = PRAM_TEST_BASE;
+ lan9252_pram_debug.length = PRAM_TEST_SIZE;
+ lan9252_pram_debug.completed = 0U;
+ lan9252_pram_debug.mismatch_count = 0U;
+ lan9252_pram_debug.first_error_offset = 0xFFFFFFFFUL;
+ lan9252_pram_debug.expected = 0U;
+ lan9252_pram_debug.actual = 0U;
+ lan9252_pram_debug.restore_verified = 0U;
+ lan9252_pram_debug.test_status = HAL_BUSY;
+ lan9252_pram_debug.restore_status = HAL_BUSY;
+ CLEAR_BIT(EXTI->IMR1, GPIO_PIN_8);
+ st = LAN9252_PRAM_Read(PRAM_TEST_BASE, pram_saved, PRAM_TEST_SIZE);
+ if (st != HAL_OK) goto no_write;
+ for (uint32_t c = 0U; c < 4U; ++c) {
+  uint16_t off = offsets[c], len = lengths[c];
+  lan9252_pram_debug.test_case = c + 1U;
+  lan9252_pram_debug.address = PRAM_TEST_BASE + off;
+  lan9252_pram_debug.length = len;
+  for (uint32_t pattern = 0U; pattern < 2U; ++pattern) {
+   lan9252_pram_debug.stage = 2U;
+   /* Restore known baseline before every case; compare entire guard region. */
+   st = LAN9252_PRAM_Write(PRAM_TEST_BASE, pram_saved, PRAM_TEST_SIZE);
+   if (st != HAL_OK) goto restore_data;
+   for (uint32_t i = 0U; i < PRAM_TEST_SIZE; ++i) pram_expected[i] = pram_saved[i];
+   for (uint32_t i = 0U; i < len; ++i)
+    pram_expected[off+i] = pattern ? ((i & 1U) ? 0xAAU : 0x55U) : (uint8_t)(i ^ 0xA5U);
+   st = LAN9252_PRAM_Write(PRAM_TEST_BASE + off, &pram_expected[off], len);
+   if (st != HAL_OK) goto restore_data;
+   lan9252_pram_debug.stage = 3U;
+   st = LAN9252_PRAM_Read(PRAM_TEST_BASE + off, pram_actual, len);
+   if (st != HAL_OK) goto restore_data;
+   for (uint32_t i = 0U; i < len; ++i) {
+    if (pram_actual[i] != pram_expected[off+i]) {
+     lan9252_pram_debug.first_error_offset = off+i;
+     lan9252_pram_debug.expected = pram_expected[off+i];
+     lan9252_pram_debug.actual = pram_actual[i];
+     ++lan9252_pram_debug.mismatch_count;
+     st = HAL_ERROR; goto restore_data;
+    }
+   }
+   st = LAN9252_PRAM_Read(PRAM_TEST_BASE, pram_actual, PRAM_TEST_SIZE);
+   if (st != HAL_OK) goto restore_data;
+   for (uint32_t i = 0U; i < PRAM_TEST_SIZE; ++i) {
+    if (pram_actual[i] != pram_expected[i]) {
+     if (lan9252_pram_debug.mismatch_count == 0U) {
+      lan9252_pram_debug.first_error_offset = i;
+      lan9252_pram_debug.expected = pram_expected[i];
+      lan9252_pram_debug.actual = pram_actual[i];
+     }
+     ++lan9252_pram_debug.mismatch_count;
+    }
+   }
+   if (lan9252_pram_debug.mismatch_count) { st = HAL_ERROR; goto restore_data; }
+   ++lan9252_pram_debug.completed;
+  }
+ }
+restore_data:
+ lan9252_pram_debug.test_status = st;
+ if (st != HAL_OK) lan9252_pram_debug.failed_stage = lan9252_pram_debug.stage;
+ lan9252_pram_debug.stage = 4U;
+ restore = LAN9252_PRAM_Write(PRAM_TEST_BASE, pram_saved, PRAM_TEST_SIZE);
+ if (restore == HAL_OK) restore = LAN9252_PRAM_Read(PRAM_TEST_BASE, pram_actual, PRAM_TEST_SIZE);
+ if (restore == HAL_OK) {
+  for (uint32_t i = 0U; i < PRAM_TEST_SIZE; ++i)
+   if (pram_actual[i] != pram_saved[i]) { restore = HAL_ERROR; break; }
+ }
+ lan9252_pram_debug.restore_status = restore;
+ if (restore != HAL_OK) {
+  if (!lan9252_pram_debug.failed_stage) lan9252_pram_debug.failed_stage = 4U;
+  return restore; /* Leave IRQ masked if restoration failed. */
+ }
+ lan9252_pram_debug.restore_verified = 1U;
+ if (st == HAL_OK) lan9252_pram_debug.stage = 5U;
+ if (irq) SET_BIT(EXTI->IMR1, GPIO_PIN_8);
+ return st;
+no_write:
+ lan9252_pram_debug.failed_stage = 1U;
+ lan9252_pram_debug.test_status = st;
+ if (irq) SET_BIT(EXTI->IMR1, GPIO_PIN_8);
+ return st;
 }
