@@ -234,9 +234,29 @@ int main(void)
 	HAL_UART_Receive_DMA(&huart1, (uint8_t*)receive_buff, 255); 
 	Vofa_Init(&Vofa_packet);
 	
-	//lan init
+	HAL_GPIO_WritePin(LAN9252_RST_GPIO_Port, LAN9252_RST_Pin, GPIO_PIN_RESET);
+	HAL_Delay(100);
+	HAL_GPIO_WritePin(LAN9252_RST_GPIO_Port, LAN9252_RST_Pin, GPIO_PIN_SET);
 	
-  HAL_StatusTypeDef ret = LAN9252_ReadReg(0x0064, &value);
+	HAL_Delay(100);
+	
+	//lan init
+	HAL_StatusTypeDef ret = LAN9252_WaitReady(5000);
+	
+	if(ret == HAL_OK)
+	{
+		 for(int i = 0; i < 1000; i++)
+		 {
+			 if(LAN9252_ReadReg(0x0064, &value) ==HAL_OK)
+				 break;
+	   }
+	}
+	else
+	{
+		HAL_UART_Transmit_DMA(&huart2, (const uint8_t *)"LANBAD", 7);
+	}
+	
+	//ret = LAN9252_CSR_Read(0x0E02U, 2, &value_CSR);
 	
 //	ret = LAN9252_CSR_Read(0x0E02, 2, &value_CSR);
 
@@ -535,7 +555,7 @@ static void MX_SPI1_Init(void)
   hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
   hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
   hspi1.Init.NSS = SPI_NSS_SOFT;
-  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_64;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_256;
   hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
   hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
@@ -843,7 +863,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(PM1_CTRL_SD_GPIO_Port, PM1_CTRL_SD_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(SPI1_CS_GPIO_Port, SPI1_CS_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(GPIOD, LAN9252_RST_Pin|SPI1_CS_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOE, LED0_Pin|LED1_Pin, GPIO_PIN_SET);
@@ -867,12 +887,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(LAN9252_INT_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : SPI1_CS_Pin */
-  GPIO_InitStruct.Pin = SPI1_CS_Pin;
+  /*Configure GPIO pins : LAN9252_RST_Pin SPI1_CS_Pin */
+  GPIO_InitStruct.Pin = LAN9252_RST_Pin|SPI1_CS_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(SPI1_CS_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 
   /*Configure GPIO pins : LED0_Pin LED1_Pin */
   GPIO_InitStruct.Pin = LED0_Pin|LED1_Pin;

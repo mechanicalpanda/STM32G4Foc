@@ -26,6 +26,7 @@ HAL_StatusTypeDef LAN9252_CSR_Read(uint16_t address, uint8_t length, uint32_t *v
 
 HAL_StatusTypeDef LAN9252_CSR_Write(uint16_t address, uint8_t length, uint32_t value);
 
+HAL_StatusTypeDef LAN9252_WaitReady(uint32_t timeout_ms);
 #ifdef __cplusplus
 
 }

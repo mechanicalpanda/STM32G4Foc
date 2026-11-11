@@ -138,3 +138,30 @@ HAL_StatusTypeDef LAN9252_CSR_Write(uint16_t address, uint8_t length, uint32_t v
 {
 	
 }
+
+HAL_StatusTypeDef LAN9252_WaitReady(uint32_t timeout_ms)
+{
+    uint32_t start = HAL_GetTick();
+    uint32_t hw_cfg;
+
+    do
+    {
+        HAL_StatusTypeDef ret =
+            LAN9252_ReadReg(0x0074U, &hw_cfg);
+
+        if (ret != HAL_OK)
+            return ret;
+
+        /* 排除全FF无响应，再判断READY */
+        if (hw_cfg != 0xFFFFFFFFUL &&
+            (hw_cfg & 0x08000000UL) != 0U)
+        {
+            return HAL_OK;
+        }
+
+        HAL_Delay(1U);
+
+    } while ((HAL_GetTick() - start) < timeout_ms);
+
+    return HAL_TIMEOUT;
+}

@@ -75,6 +75,8 @@ void Error_Handler(void);
 #define KEY2_EXTI_IRQn EXTI15_10_IRQn
 #define LAN9252_INT_Pin GPIO_PIN_8
 #define LAN9252_INT_GPIO_Port GPIOD
+#define LAN9252_RST_Pin GPIO_PIN_9
+#define LAN9252_RST_GPIO_Port GPIOD
 #define SPI1_CS_Pin GPIO_PIN_10
 #define SPI1_CS_GPIO_Port GPIOD
 #define LED0_Pin GPIO_PIN_0
