@@ -64,6 +64,8 @@ void Error_Handler(void);
 #define PWM_FREQ 30000
 #define PM1_CTRL_SD_Pin GPIO_PIN_13
 #define PM1_CTRL_SD_GPIO_Port GPIOC
+#define SPI3_RST_Pin GPIO_PIN_10
+#define SPI3_RST_GPIO_Port GPIOE
 #define KEY0_Pin GPIO_PIN_12
 #define KEY0_GPIO_Port GPIOE
 #define KEY0_EXTI_IRQn EXTI15_10_IRQn
@@ -79,6 +81,8 @@ void Error_Handler(void);
 #define LAN9252_RST_GPIO_Port GPIOD
 #define SPI1_CS_Pin GPIO_PIN_10
 #define SPI1_CS_GPIO_Port GPIOD
+#define SPI3_CS_Pin GPIO_PIN_11
+#define SPI3_CS_GPIO_Port GPIOD
 #define LED0_Pin GPIO_PIN_0
 #define LED0_GPIO_Port GPIOE
 #define LED1_Pin GPIO_PIN_1

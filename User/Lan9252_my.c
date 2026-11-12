@@ -2,12 +2,13 @@
 
 #include "main.h"
 
-extern SPI_HandleTypeDef hspi1;
-
+//extern SPI_HandleTypeDef hspi1;
+extern SPI_HandleTypeDef hspi3;
 static void LAN9252_CS_Enable(void)
 
 {
-    HAL_GPIO_WritePin(SPI1_CS_GPIO_Port, SPI1_CS_Pin, GPIO_PIN_RESET);
+    //HAL_GPIO_WritePin(SPI1_CS_GPIO_Port, SPI1_CS_Pin, GPIO_PIN_RESET);
+	    HAL_GPIO_WritePin(SPI3_CS_GPIO_Port, SPI3_CS_Pin, GPIO_PIN_RESET);
 }
 
 /**
@@ -19,7 +20,8 @@ static void LAN9252_CS_Enable(void)
 static void LAN9252_CS_Disable(void)
 
 {
-   HAL_GPIO_WritePin(SPI1_CS_GPIO_Port, SPI1_CS_Pin, GPIO_PIN_SET);
+   //HAL_GPIO_WritePin(SPI1_CS_GPIO_Port, SPI1_CS_Pin, GPIO_PIN_SET);
+	 HAL_GPIO_WritePin(SPI3_CS_GPIO_Port, SPI3_CS_Pin, GPIO_PIN_SET);
 }
 
 
@@ -38,7 +40,7 @@ HAL_StatusTypeDef LAN9252_ReadReg(uint16_t reg_addr, uint32_t *p_data)
     uint8_t rx_buf[7] = {0};
     LAN9252_CS_Enable();                // 必须拉低CS
     HAL_StatusTypeDef ret =
-        HAL_SPI_TransmitReceive(&hspi1,
+        HAL_SPI_TransmitReceive(&hspi3,
                                 tx_buf,
                                 rx_buf,
                                 sizeof(tx_buf),
@@ -62,7 +64,7 @@ HAL_StatusTypeDef LAN9252_WriteReg(uint16_t reg_addr, uint32_t data)
     HAL_StatusTypeDef ret;
 			
     LAN9252_CS_Enable();
-    ret = HAL_SPI_Transmit(&hspi1, tx, sizeof(tx), 100U);
+    ret = HAL_SPI_Transmit(&hspi3, tx, sizeof(tx), 100U);
     LAN9252_CS_Disable();
     return ret;
 }
