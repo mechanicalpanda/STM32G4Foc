@@ -193,6 +193,7 @@ extern float speed_count_tick;
 extern float vq_ff;
 uint32_t value = 0;
 uint32_t value_CSR = 0;
+uint32_t value_CSR_write = 0;
 /* USER CODE END 0 */
 
 /**
@@ -260,8 +261,14 @@ int main(void)
 	}
 	
 	ret = LAN9252_CSR_Read(0x0E02U, 2, &value_CSR);
+	if(ret == HAL_OK)
+	{
+		HAL_UART_Transmit_DMA(&huart2, (const uint8_t *)"CSR_Re", 7);
+	}
 	
-//	ret = LAN9252_CSR_Read(0x0E02, 2, &value_CSR);
+	ret = LAN9252_CSR_Write(0x0f80, 4, 0x11223344);
+	
+	ret = LAN9252_CSR_Read(0x0f80, 4, &value_CSR_write);
 
 //	lan_status = LAN9252_Init();
 

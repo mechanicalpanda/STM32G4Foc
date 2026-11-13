@@ -138,7 +138,36 @@ HAL_StatusTypeDef LAN9252_CSR_Read(uint16_t address, uint8_t length, uint32_t *v
 
 HAL_StatusTypeDef LAN9252_CSR_Write(uint16_t address, uint8_t length, uint32_t value)
 {
+	HAL_StatusTypeDef ret;
+	  //等待BUSY清零
+	  ret = CSR_WaitIdle();
+	  if (ret != HAL_OK)
+    return ret;
+		
+//		写CSR_CMD：0xC0000000 | length<<16 | address
+//     bit31	BUSY，写 1 启动操作
+//     bit30	READ，1 表示读取
+//     bit23～16	读取字节数
+//     bit15～0	ESC 内部寄存器地址
+		
 	
+		
+		ret = LAN9252_WriteReg(0x0300, value);
+		if (ret != HAL_OK)
+      return ret;
+		
+		uint32_t command = 0x80000000UL | ((uint32_t)length << 16) | (uint32_t)address;
+		ret = LAN9252_WriteReg(0x0304, command);
+		if (ret != HAL_OK)
+      return ret;
+		
+		//等待BUSY清零
+		 ret = CSR_WaitIdle();
+	  if (ret != HAL_OK)
+    return ret;
+		 
+		
+			return HAL_OK;
 }
 
 HAL_StatusTypeDef LAN9252_WaitReady(uint32_t timeout_ms)
