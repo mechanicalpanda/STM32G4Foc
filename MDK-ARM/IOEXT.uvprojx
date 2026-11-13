@@ -340,7 +340,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32G474xx,ARM_MATH_CM4,__TARGET_FPU_VFP</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;../User;../Drivers/CMSIS/DSP/Include</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;../User;../Drivers/CMSIS/DSP/Include;..\Ethercat\Inc;..\Ethercat\port;..\bsp\spiflash;..\bsp\usart;..\bsp\gpio;..\bsp\GeneralTIM</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -903,6 +903,146 @@
           </Files>
         </Group>
         <Group>
+          <GroupName>bsp</GroupName>
+          <Files>
+            <File>
+              <FileName>el9800appl.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\User\el9800appl.c</FilePath>
+            </File>
+            <File>
+              <FileName>el9800appl.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\User\el9800appl.h</FilePath>
+            </File>
+            <File>
+              <FileName>el9800hw.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Ethercat\port\el9800hw.c</FilePath>
+            </File>
+            <File>
+              <FileName>bsp_debug_usart.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\bsp\usart\bsp_debug_usart.c</FilePath>
+            </File>
+            <File>
+              <FileName>bsp_spiflash.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\bsp\spiflash\bsp_spiflash.c</FilePath>
+            </File>
+            <File>
+              <FileName>bsp_led.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\bsp\led\bsp_led.c</FilePath>
+            </File>
+            <File>
+              <FileName>bsp_gpio.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\bsp\gpio\bsp_gpio.c</FilePath>
+            </File>
+            <File>
+              <FileName>bsp_GeneralTIM.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\bsp\GeneralTIM\bsp_GeneralTIM.c</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>EtherCat/Src</GroupName>
+          <Files>
+            <File>
+              <FileName>aoeappl.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Ethercat\src\aoeappl.c</FilePath>
+            </File>
+            <File>
+              <FileName>coeappl.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Ethercat\src\coeappl.c</FilePath>
+            </File>
+            <File>
+              <FileName>ecatappl.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Ethercat\src\ecatappl.c</FilePath>
+            </File>
+            <File>
+              <FileName>foeappl.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Ethercat\src\foeappl.c</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>EtherCat/Stack</GroupName>
+          <Files>
+            <File>
+              <FileName>bootmode.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Ethercat\src\bootmode.c</FilePath>
+            </File>
+            <File>
+              <FileName>diag.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Ethercat\src\diag.c</FilePath>
+            </File>
+            <File>
+              <FileName>ecataoe.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Ethercat\src\ecataoe.c</FilePath>
+            </File>
+            <File>
+              <FileName>ecatcoe.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Ethercat\src\ecatcoe.c</FilePath>
+            </File>
+            <File>
+              <FileName>ecateoe.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Ethercat\src\ecateoe.c</FilePath>
+            </File>
+            <File>
+              <FileName>ecatfoe.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Ethercat\src\ecatfoe.c</FilePath>
+            </File>
+            <File>
+              <FileName>ecatslv.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Ethercat\src\ecatslv.c</FilePath>
+            </File>
+            <File>
+              <FileName>ecatsoe.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Ethercat\src\ecatsoe.c</FilePath>
+            </File>
+            <File>
+              <FileName>emcy.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Ethercat\src\emcy.c</FilePath>
+            </File>
+            <File>
+              <FileName>eoeappl.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Ethercat\src\eoeappl.c</FilePath>
+            </File>
+            <File>
+              <FileName>mailbox.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Ethercat\src\mailbox.c</FilePath>
+            </File>
+            <File>
+              <FileName>objdef.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Ethercat\src\objdef.c</FilePath>
+            </File>
+            <File>
+              <FileName>sdoserv.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Ethercat\src\sdoserv.c</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
           <GroupName>::CMSIS</GroupName>
         </Group>
       </Groups>
@@ -921,5 +1061,14 @@
     </components>
     <files/>
   </RTE>
+
+  <LayerInfo>
+    <Layers>
+      <Layer>
+        <LayName>IOEXT</LayName>
+        <LayPrjMark>1</LayPrjMark>
+      </Layer>
+    </Layers>
+  </LayerInfo>
 
 </Project>

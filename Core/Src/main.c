@@ -120,21 +120,21 @@ int fputc(int ch, FILE * f)
 	return ch;
 }
 
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
-{
-	switch(GPIO_Pin)
-	{
-		case GPIO_PIN_12:
-			HAL_GPIO_TogglePin(LED0_GPIO_Port,LED0_Pin);
-			break;
-		case GPIO_PIN_13:
-			HAL_GPIO_TogglePin(LED0_GPIO_Port,LED1_Pin);
-			break;
-		case GPIO_PIN_14:
-			break;
-	}
-		
-}
+//void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+//{
+//	switch(GPIO_Pin)
+//	{
+//		case GPIO_PIN_12:
+//			HAL_GPIO_TogglePin(LED0_GPIO_Port,LED0_Pin);
+//			break;
+//		case GPIO_PIN_13:
+//			HAL_GPIO_TogglePin(LED0_GPIO_Port,LED1_Pin);
+//			break;
+//		case GPIO_PIN_14:
+//			break;
+//	}
+//		
+//}
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -194,6 +194,7 @@ extern float vq_ff;
 uint32_t value = 0;
 uint32_t value_CSR = 0;
 uint32_t value_CSR_write = 0;
+volatile HAL_StatusTypeDef pram_test_status = HAL_BUSY;
 /* USER CODE END 0 */
 
 /**
@@ -269,6 +270,11 @@ int main(void)
 	ret = LAN9252_CSR_Write(0x0f80, 4, 0x11223344);
 	
 	ret = LAN9252_CSR_Read(0x0f80, 4, &value_CSR_write);
+	
+	if (ret == HAL_OK && value == 0x87654321UL)
+	{
+		pram_test_status = LAN9252_PRAM_SelfTest();
+	}
 
 //	lan_status = LAN9252_Init();
 

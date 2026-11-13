@@ -196,3 +196,272 @@ HAL_StatusTypeDef LAN9252_WaitReady(uint32_t timeout_ms)
 
     return HAL_TIMEOUT;
 }
+
+
+/* PRAM: call from main/task context, before the EtherCAT stack uses this RAM.
+ * Address and byte length must both be multiples of four. No concurrent access.
+ */
+#define PRAM_READ_FIFO       0x0000U
+#define PRAM_WRITE_FIFO      0x0020U
+#define PRAM_READ_ADDR_LEN   0x0308U
+#define PRAM_READ_CMD        0x030CU
+#define PRAM_WRITE_ADDR_LEN  0x0310U
+#define PRAM_WRITE_CMD       0x0314U
+#define PRAM_BUSY            0x80000000UL
+#define PRAM_ABORT           0x40000000UL
+#define PRAM_TIMEOUT_MS      100U
+#define PRAM_TEST_ADDRESS    0x1000U
+#define PRAM_TEST_BYTES      256U
+
+ LAN9252_PRAM_Debug_t lan9252_pram_debug;
+
+static HAL_StatusTypeDef PRAM_WaitIdle(uint16_t command_reg)
+{
+    uint32_t command;
+    uint32_t start = HAL_GetTick();
+    HAL_StatusTypeDef ret;
+
+    do
+    {
+        ret = LAN9252_ReadReg(command_reg, &command);
+        if (ret != HAL_OK)
+            return ret;
+
+        lan9252_pram_debug.last_command = command;
+        if ((command & PRAM_BUSY) == 0U)
+            return HAL_OK;
+    } while ((HAL_GetTick() - start) < PRAM_TIMEOUT_MS);
+
+    return HAL_TIMEOUT;
+}
+
+static HAL_StatusTypeDef PRAM_WaitFIFO(uint16_t command_reg,
+                                       uint32_t *word_count)
+{
+    uint32_t command;
+    uint32_t start = HAL_GetTick();
+    HAL_StatusTypeDef ret;
+
+    do
+    {
+        ret = LAN9252_ReadReg(command_reg, &command);
+        if (ret != HAL_OK)
+            return ret;
+
+        lan9252_pram_debug.last_command = command;
+        *word_count = (command >> 8) & 0x1FU;
+        if ((command & 1U) != 0U && *word_count != 0U)
+            return HAL_OK;
+    } while ((HAL_GetTick() - start) < PRAM_TIMEOUT_MS);
+
+    return HAL_TIMEOUT;
+}
+
+HAL_StatusTypeDef LAN9252_PRAM_Read(uint16_t address, uint8_t *buffer,
+                                    uint16_t length)
+{
+    HAL_StatusTypeDef ret;
+    uint32_t count, data;
+    uint32_t offset = 0U;
+
+    if (buffer == NULL || length == 0U ||
+        (address & 3U) != 0U || (length & 3U) != 0U ||
+        address < 0x1000U || (uint32_t)address + length > 0x2000U)
+        return HAL_ERROR;
+
+    ret = LAN9252_WriteReg(PRAM_READ_CMD, PRAM_ABORT);
+    if (ret != HAL_OK)
+        return ret;
+    ret = PRAM_WaitIdle(PRAM_READ_CMD);
+    if (ret != HAL_OK)
+        return ret;
+
+    ret = LAN9252_WriteReg(PRAM_READ_ADDR_LEN,
+                           ((uint32_t)length << 16) | address);
+    if (ret != HAL_OK)
+        return ret;
+    ret = LAN9252_WriteReg(PRAM_READ_CMD, PRAM_BUSY);
+    if (ret != HAL_OK)
+        goto failed;
+
+    while (offset < length)
+    {
+        ret = PRAM_WaitFIFO(PRAM_READ_CMD, &count);
+        if (ret != HAL_OK)
+            goto failed;
+
+        while (count != 0U && offset < length)
+        {
+            ret = LAN9252_ReadReg(PRAM_READ_FIFO, &data);
+            if (ret != HAL_OK)
+                goto failed;
+
+            buffer[offset]      = (uint8_t)data;
+            buffer[offset + 1U] = (uint8_t)(data >> 8);
+            buffer[offset + 2U] = (uint8_t)(data >> 16);
+            buffer[offset + 3U] = (uint8_t)(data >> 24);
+            offset += 4U;
+            count--;
+        }
+    }
+
+    ret = PRAM_WaitIdle(PRAM_READ_CMD);
+    if (ret == HAL_OK)
+        return HAL_OK;
+failed:
+    /* Best effort cleanup; retain the original error. */
+    (void)LAN9252_WriteReg(PRAM_READ_CMD, PRAM_ABORT);
+    return ret;
+}
+
+HAL_StatusTypeDef LAN9252_PRAM_Write(uint16_t address, const uint8_t *buffer,
+                                     uint16_t length)
+{
+    HAL_StatusTypeDef ret;
+    uint32_t count, data;
+    uint32_t offset = 0U;
+
+    if (buffer == NULL || length == 0U ||
+        (address & 3U) != 0U || (length & 3U) != 0U ||
+        address < 0x1000U || (uint32_t)address + length > 0x2000U)
+        return HAL_ERROR;
+
+    ret = LAN9252_WriteReg(PRAM_WRITE_CMD, PRAM_ABORT);
+    if (ret != HAL_OK)
+        return ret;
+    ret = PRAM_WaitIdle(PRAM_WRITE_CMD);
+    if (ret != HAL_OK)
+        return ret;
+
+    ret = LAN9252_WriteReg(PRAM_WRITE_ADDR_LEN,
+                           ((uint32_t)length << 16) | address);
+    if (ret != HAL_OK)
+        return ret;
+    ret = LAN9252_WriteReg(PRAM_WRITE_CMD, PRAM_BUSY);
+    if (ret != HAL_OK)
+        goto failed;
+
+    while (offset < length)
+    {
+        ret = PRAM_WaitFIFO(PRAM_WRITE_CMD, &count);
+        if (ret != HAL_OK)
+            goto failed;
+
+        while (count != 0U && offset < length)
+        {
+            data =  (uint32_t)buffer[offset]
+                 | ((uint32_t)buffer[offset + 1U] << 8)
+                 | ((uint32_t)buffer[offset + 2U] << 16)
+                 | ((uint32_t)buffer[offset + 3U] << 24);
+            ret = LAN9252_WriteReg(PRAM_WRITE_FIFO, data);
+            if (ret != HAL_OK)
+                goto failed;
+
+            offset += 4U;
+            count--;
+        }
+    }
+
+    ret = PRAM_WaitIdle(PRAM_WRITE_CMD);
+    if (ret == HAL_OK)
+        return HAL_OK;
+failed:
+    (void)LAN9252_WriteReg(PRAM_WRITE_CMD, PRAM_ABORT);
+    return ret;
+}
+
+HAL_StatusTypeDef LAN9252_PRAM_SelfTest(void)
+{
+    static uint8_t saved[PRAM_TEST_BYTES];
+    static uint8_t expected[PRAM_TEST_BYTES];
+    static uint8_t actual[PRAM_TEST_BYTES];
+    const uint16_t sizes[2] = {16U, PRAM_TEST_BYTES};
+    uint16_t length;
+    HAL_StatusTypeDef ret, restore;
+
+    lan9252_pram_debug.stage = 1U;
+    lan9252_pram_debug.failed_stage = 0U;
+    lan9252_pram_debug.last_command = 0U;
+    lan9252_pram_debug.offset = 0U;
+    lan9252_pram_debug.expected = 0U;
+    lan9252_pram_debug.actual = 0U;
+    lan9252_pram_debug.errors = 0U;
+    lan9252_pram_debug.restore_verified = 0U;
+    lan9252_pram_debug.status = HAL_BUSY;
+    lan9252_pram_debug.restore_status = HAL_BUSY; /* Not attempted. */
+
+    ret = LAN9252_PRAM_Read(PRAM_TEST_ADDRESS, saved, PRAM_TEST_BYTES);
+    if (ret != HAL_OK)
+    {
+        lan9252_pram_debug.failed_stage = 1U;
+        lan9252_pram_debug.status = ret;
+        return ret; /* No test write if backup failed. */
+    }
+
+    for (uint32_t pass = 0U; pass < 2U; pass++)
+    {
+        length = sizes[pass];
+        for (uint32_t i = 0U; i < length; i++)
+            expected[i] = (uint8_t)((i * 37U + 0x12U) ^ (pass * 0xFFU));
+
+        lan9252_pram_debug.stage = 2U + pass * 2U;
+        ret = LAN9252_PRAM_Write(PRAM_TEST_ADDRESS, expected, length);
+        if (ret != HAL_OK)
+            break;
+
+        lan9252_pram_debug.stage = 3U + pass * 2U;
+        ret = LAN9252_PRAM_Read(PRAM_TEST_ADDRESS, actual, length);
+        if (ret != HAL_OK)
+            break;
+
+        for (uint32_t i = 0U; i < length; i++)
+        {
+            if (actual[i] != expected[i])
+            {
+                if (lan9252_pram_debug.errors == 0U)
+                {
+                    lan9252_pram_debug.offset = i;
+                    lan9252_pram_debug.expected = expected[i];
+                    lan9252_pram_debug.actual = actual[i];
+                }
+                lan9252_pram_debug.errors++;
+                ret = HAL_ERROR;
+            }
+        }
+        if (ret != HAL_OK)
+            break;
+    }
+
+    lan9252_pram_debug.status = ret;
+    if (ret != HAL_OK)
+        lan9252_pram_debug.failed_stage = lan9252_pram_debug.stage;
+
+    /* A timed-out write may still have modified RAM: always restore backup. */
+    lan9252_pram_debug.stage = 6U;
+    restore = LAN9252_PRAM_Write(PRAM_TEST_ADDRESS, saved, PRAM_TEST_BYTES);
+    if (restore == HAL_OK)
+        restore = LAN9252_PRAM_Read(PRAM_TEST_ADDRESS, actual, PRAM_TEST_BYTES);
+    if (restore == HAL_OK)
+    {
+        for (uint32_t i = 0U; i < PRAM_TEST_BYTES; i++)
+        {
+            if (actual[i] != saved[i])
+            {
+                restore = HAL_ERROR;
+                break;
+            }
+        }
+    }
+    lan9252_pram_debug.restore_status = restore;
+    if (restore != HAL_OK)
+    {
+        if (lan9252_pram_debug.failed_stage == 0U)
+            lan9252_pram_debug.failed_stage = 6U;
+        return restore;
+    }
+
+    lan9252_pram_debug.restore_verified = 1U;
+    if (ret == HAL_OK)
+        lan9252_pram_debug.stage = 7U;
+    return ret;
+}

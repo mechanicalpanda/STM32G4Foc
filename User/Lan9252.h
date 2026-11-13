@@ -60,18 +60,8 @@ extern volatile LAN9252_CSR_WriteDebug_t lan9252_csr_write_debug;
 HAL_StatusTypeDef LAN9252_CSR_Write(uint16_t address, uint8_t length, uint32_t value);
 HAL_StatusTypeDef LAN9252_CSR_WriteSelfTest(void);
 
-/* Blocking non-reentrant PRAM API; RAM addresses 0x1000..0x1FFF.
- * Startup self-test only: no SSC/master access to this RAM while testing. */
-typedef struct {
- uint32_t stage, failed_stage, test_case, address, length, completed;
- uint32_t mismatch_count, first_error_offset, expected, actual;
- uint32_t last_command, restore_verified;
- HAL_StatusTypeDef test_status, restore_status;
-} LAN9252_PRAM_Debug_t;
-extern volatile LAN9252_PRAM_Debug_t lan9252_pram_debug;
-HAL_StatusTypeDef LAN9252_PRAM_Read(uint16_t address, uint8_t *buffer, uint16_t length);
-HAL_StatusTypeDef LAN9252_PRAM_Write(uint16_t address, const uint8_t *buffer, uint16_t length);
-HAL_StatusTypeDef LAN9252_PRAM_SelfTest(void);
+/* Current PRAM declarations are shared with the SPI3 driver. */
+#include "Lan9252_my.h"
 #ifdef __cplusplus
 }
 #endif
