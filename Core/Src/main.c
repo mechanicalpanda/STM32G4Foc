@@ -29,6 +29,9 @@
 #include "PLL.h"
 #include "Lan9252.h"
 #include "Lan9252_my.h"
+#include "el9800hw.h"
+#include "el9800appl.h"
+#include "ecatappl.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -39,6 +42,8 @@ TIM_HandleTypeDef htim1;
 uint8_t receive_buff[256] = {0};
 UART_HandleTypeDef huart1;
 
+extern UINT16 MainInit(void);
+extern void MainLoop(void);
 //lan9252
 HAL_StatusTypeDef lan_status;
 uint32_t lan_errors = 0;
@@ -233,12 +238,13 @@ int main(void)
   MX_TIM3_Init();
   MX_USART2_UART_Init();
   MX_SPI1_Init();
-  MX_SPI3_Init();
+//  MX_SPI3_Init();
   /* USER CODE BEGIN 2 */
   __HAL_UART_ENABLE_IT(&huart1, UART_IT_IDLE);
 	HAL_UART_Receive_DMA(&huart1, (uint8_t*)receive_buff, 255); 
 	Vofa_Init(&Vofa_packet);
 	
+#if 0	
 	HAL_GPIO_WritePin(SPI3_RST_GPIO_Port, SPI3_RST_Pin, GPIO_PIN_RESET);
 	HAL_Delay(100);
 	HAL_GPIO_WritePin(SPI3_RST_GPIO_Port, SPI3_RST_Pin, GPIO_PIN_SET);
@@ -275,51 +281,10 @@ int main(void)
 	{
 		pram_test_status = LAN9252_PRAM_SelfTest();
 	}
-
-//	lan_status = LAN9252_Init();
-
-//	if (lan_status == HAL_OK)
-//	{
-//		  HAL_UART_Transmit_DMA(&huart2, (const uint8_t *)"LANOK", 6);
-//			lan_status = LAN9252_SelfTest(10000U, &lan_errors);
-//		
-//      if (lan_status == HAL_OK)
-//          lan_status = LAN9252_CSR_SelfTest();
-//      if (lan_status == HAL_OK)
-//          lan_status = LAN9252_CSR_WriteSelfTest();
-//      if (lan_status == HAL_OK)
-//          lan_status = LAN9252_PRAM_SelfTest();
-//	}
-//	else
-//	{
-//		  HAL_UART_Transmit_DMA(&huart2, (const uint8_t *)"LANBAD", 7);
-//	}
-
-//	uint8_t _dbg_Buff[1500];
-	
-//	adc_test_status = ADC_TestStart();
-
-//	if (adc_test_status != HAL_OK)
-//	{
-//			adc_test_error = HAL_ADC_GetError(&hadc1);
-//			Error_Handler();
-//  }
-	
-	/* 三相初始比较值：2500/5000，约50%占空�? */
-	//pwm_compare_status = TIM1_ThreePhase_SetCompare(2500U, 2500U, 2500U);
-   // TIM1_ThreePhase_DebugRead();
-//    if (pwm_compare_status != HAL_OK)
-//	{
-//			Error_Handler();
-//	}
-
-	/* 同时�?启三路PWM及对应互补输�? */
-	//pwm_start_status = TIM1_ThreePhase_Start();
-  //  TIM1_ThreePhase_DebugRead();
-//    if (pwm_start_status != HAL_OK)
-//	{
-//			Error_Handler();
-//	}
+#endif
+  HW_Init();
+	MainInit();	
+	bRunApplication = TRUE;
 
 	HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
 	HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
@@ -364,6 +329,15 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+	
+    do
+    {
+        MainLoop();
+
+    } while (bRunApplication == TRUE);
+
+    HW_Release();
+		
   while (1)
   {
     /* USER CODE END WHILE */

@@ -14,16 +14,16 @@ void RST_Configuration(void)
    /* 定义IO硬件初始化结构体变量 */
   GPIO_InitTypeDef GPIO_InitStruct;
 	
-  __HAL_RCC_GPIOF_CLK_ENABLE();	
+  __HAL_RCC_GPIOE_CLK_ENABLE();	
     /**  GPIO Configuration    
-    PD2     ------> RST
+    PE8     ------> RST
     */
-  GPIO_InitStruct.Pin = GPIO_PIN_8;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  GPIO_InitStruct.Pin   = GPIO_PIN_10;
+  GPIO_InitStruct.Mode  = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull  = GPIO_PULLUP;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;	
-  HAL_GPIO_Init(GPIOF, &GPIO_InitStruct); 
-  HAL_NVIC_SetPriority(EXTI9_5_IRQn, 1, 0);  
+  HAL_GPIO_Init(GPIOE, &GPIO_InitStruct); 
+  HAL_NVIC_SetPriority(EXTI15_10_IRQn, 1, 0);  
 
 }
 
@@ -43,6 +43,61 @@ void EXTI0_Configuration(void)
 	
   HAL_NVIC_SetPriority(EXTI0_IRQn,1, 0);
 //  HAL_NVIC_EnableIRQ(EXTI4_IRQn);	
+}
+
+void EXTI8_Configuration(void)
+{
+   /* 定义IO硬件初始化结构体变量 */
+  GPIO_InitTypeDef GPIO_InitStruct;	
+	
+  __HAL_RCC_GPIOE_CLK_ENABLE();	
+    /**  GPIO Configuration    
+    PE8     ------> IRQ
+    */	
+  GPIO_InitStruct.Pin = GPIO_PIN_8;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);   
+		
+  HAL_NVIC_SetPriority(EXTI9_5_IRQn, 1, 1);
+	
+}
+
+
+void EXTI7_Configuration(void)
+{
+   /* 定义IO硬件初始化结构体变量 */
+  GPIO_InitTypeDef GPIO_InitStruct;	
+	
+  __HAL_RCC_GPIOC_CLK_ENABLE();	
+    /**  GPIO Configuration    
+    PE14     ------> SYNC0
+    */	
+  GPIO_InitStruct.Pin = GPIO_PIN_7;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);   
+		
+  HAL_NVIC_SetPriority(EXTI9_5_IRQn, 1, 1);
+	
+}
+
+void EXTI6_Configuration(void)
+{
+   /* 定义IO硬件初始化结构体变量 */
+  GPIO_InitTypeDef GPIO_InitStruct;	
+	
+  __HAL_RCC_GPIOC_CLK_ENABLE();	
+    /**  GPIO Configuration    
+    PE14     ------> SYNC0
+    */	
+  GPIO_InitStruct.Pin = GPIO_PIN_6;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);   
+		
+  HAL_NVIC_SetPriority(EXTI9_5_IRQn, 1, 1);
+	
 }
 
 void EXTI3_Configuration(void)

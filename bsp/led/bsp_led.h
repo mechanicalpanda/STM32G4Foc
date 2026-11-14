@@ -25,14 +25,14 @@ typedef enum
  * 都是与GPIOA，GPIO_Pin_0相关的，我们专门把这些与开发板硬件相关的内容定义为宏，
  * 这对于修改或者移植程序非常方便。
  */
-#define LED1_RCC_CLK_ENABLE()         __HAL_RCC_GPIOB_CLK_ENABLE()
-#define LED1_GPIO_PIN                 GPIO_PIN_11
-#define LED1_GPIO                     GPIOB
+#define LED1_RCC_CLK_ENABLE()         __HAL_RCC_GPIOE_CLK_ENABLE()
+#define LED1_GPIO_PIN                 GPIO_PIN_0
+#define LED1_GPIO                     GPIOE
 
 
-#define LED2_RCC_CLK_ENABLE()         __HAL_RCC_GPIOB_CLK_ENABLE()
-#define LED2_GPIO_PIN                 GPIO_PIN_12
-#define LED2_GPIO                     GPIOB
+#define LED2_RCC_CLK_ENABLE()         __HAL_RCC_GPIOE_CLK_ENABLE()
+#define LED2_GPIO_PIN                 GPIO_PIN_1
+#define LED2_GPIO                     GPIOE
 
 
 #define LED1_ON                       HAL_GPIO_WritePin(LED1_GPIO,LED1_GPIO_PIN,GPIO_PIN_SET)    // 输出高电平

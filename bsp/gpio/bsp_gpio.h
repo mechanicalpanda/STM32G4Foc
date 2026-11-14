@@ -7,8 +7,8 @@
 /* 类型定义 --------------------------------------------------------------*/
 
 /* 宏定义 --------------------------------------------------------------------*/
-#define RST_ESC     HAL_GPIO_WritePin(GPIOF, GPIO_PIN_8, GPIO_PIN_RESET);
-#define RST_ESCEND  HAL_GPIO_WritePin(GPIOF, GPIO_PIN_8, GPIO_PIN_SET);
+#define RST_ESC     HAL_GPIO_WritePin(GPIOE, GPIO_PIN_10, GPIO_PIN_RESET);
+#define RST_ESCEND  HAL_GPIO_WritePin(GPIOE, GPIO_PIN_10, GPIO_PIN_SET);
 
 
 /* 扩展变量 ------------------------------------------------------------------*/
@@ -17,6 +17,9 @@ void EXTI0_Configuration(void);
 void EXTI1_Configuration(void);
 void EXTI3_Configuration(void);
 void RST_Configuration(void);
+void EXTI6_Configuration(void);
+void EXTI7_Configuration(void);
+void EXTI8_Configuration(void);
 
 #endif  // __BSP_GPIO_H__
 

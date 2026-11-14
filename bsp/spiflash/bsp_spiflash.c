@@ -8,7 +8,7 @@
 #include "core_cm4.h"
 
 #define u32 uint32_t
-
+extern void Error_Handler(void);
 /* 私有类型定义 --------------------------------------------------------------*/
 /* 私有宏定义 ----------------------------------------------------------------*/
 #define Dummy_Byte                      0xFF
@@ -28,19 +28,25 @@ SPI_HandleTypeDef hspix;
 */
 void MX_SPIFlash_Init(void)
 {
-  hspix.Instance = SPI1;
-  hspix.Init.Mode = SPI_MODE_MASTER;//主模式
-  hspix.Init.Direction = SPI_DIRECTION_2LINES;//双向
-  hspix.Init.DataSize = SPI_DATASIZE_8BIT;//8位数据帧长度
-  hspix.Init.CLKPolarity = SPI_POLARITY_LOW;//时钟极性低
-  hspix.Init.CLKPhase = SPI_PHASE_1EDGE;//奇数位
-  hspix.Init.NSS = SPI_NSS_SOFT;//软件
-  hspix.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_16;//预分频系数为4
-  hspix.Init.FirstBit = SPI_FIRSTBIT_MSB;//MSB先行
+  hspix.Instance = SPI3;
+  hspix.Init.Mode = SPI_MODE_MASTER;                          //主模式
+  hspix.Init.Direction = SPI_DIRECTION_2LINES;                //双向
+  hspix.Init.DataSize = SPI_DATASIZE_8BIT;                    //8位数据帧长度
+  hspix.Init.CLKPolarity = SPI_POLARITY_LOW;                  //时钟极性低
+  hspix.Init.CLKPhase = SPI_PHASE_1EDGE;                      //奇数位
+  hspix.Init.NSS = SPI_NSS_SOFT;                              //软件
+  hspix.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_16;    //预分频系数为4
+  hspix.Init.FirstBit = SPI_FIRSTBIT_MSB;                     //MSB先行
   hspix.Init.TIMode = SPI_TIMODE_DISABLE;
-  hspix.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;//CRC校验失能
+  hspix.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;     //CRC校验失能
   hspix.Init.CRCPolynomial = 10;
+	HAL_SPI_MspInit_ethercat(&hspix);
   HAL_SPI_Init(&hspix);
+	
+	if (HAL_SPI_Init(&hspix) != HAL_OK)
+  {
+    Error_Handler();
+  }
 	
 }
 
@@ -50,47 +56,49 @@ void MX_SPIFlash_Init(void)
   * 返 回 值: 无
   * 说    明: 该函数被HAL库内部调用
   */
-//void HAL_SPI_MspInit(SPI_HandleTypeDef* hspi)
-//{
-//  GPIO_InitTypeDef GPIO_InitStruct;
-//  if(hspi->Instance==SPI1)
-//  {
-//    /* SPI外设时钟使能 */
-//    FLASH_SPIx_RCC_CLK_ENABLE();
-//    /* GPIO外设时钟使能 */
-//    FLASH_SPI_SCK_ClK_ENABLE();
-//    FLASH_SPI_MISO_ClK_ENABLE();    
-//		FLASH_SPI_MOSI_ClK_ENABLE();    
-//		FLASH_SPI_CS_ClK_ENABLE();    
-//    /**SPI3 GPIO Configuration    
-//    PD11    ------> SPI3_CS
-//    PC10    ------> SPI3_SCK
-//    PC11    ------> SPI3_MISO
-//    PC12    ------> SPI3_MOSI 
-//    */
-//    GPIO_InitStruct.Pin = FLASH_SPI_SCK_PIN;
-//    GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-//    GPIO_InitStruct.Alternate = GPIO_AFx_SPIx;
-//    HAL_GPIO_Init(FLASH_SPI_SCK_PORT, &GPIO_InitStruct);
+void HAL_SPI_MspInit_ethercat(SPI_HandleTypeDef* hspi)
+{
+  GPIO_InitTypeDef GPIO_InitStruct;
+  if(hspi->Instance==SPI3)
+  {
+    /* SPI外设时钟使能 */
+    FLASH_SPIx_RCC_CLK_ENABLE();
+    /* GPIO外设时钟使能 */
+    FLASH_SPI_SCK_ClK_ENABLE();
+    FLASH_SPI_MISO_ClK_ENABLE();    
+		FLASH_SPI_MOSI_ClK_ENABLE();    
+		FLASH_SPI_CS_ClK_ENABLE();    
+    /**SPI3 GPIO Configuration    
+    PD11    ------> SPI3_CS
+    PC10    ------> SPI3_SCK
+    PC11    ------> SPI3_MISO
+    PC12    ------> SPI3_MOSI 
+    */
+    GPIO_InitStruct.Pin = FLASH_SPI_SCK_PIN;
+    GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+    GPIO_InitStruct.Alternate = GPIO_AFx_SPIx;
+		GPIO_InitStruct.Pull  = GPIO_NOPULL;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
+    HAL_GPIO_Init(FLASH_SPI_SCK_PORT, &GPIO_InitStruct);
 
-//    GPIO_InitStruct.Pin = FLASH_SPI_MISO_PIN;
-//    GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-//		GPIO_InitStruct.Pull = GPIO_PULLUP;
-//    GPIO_InitStruct.Alternate = GPIO_AFx_SPIx;
-//    HAL_GPIO_Init(FLASH_SPI_MISO_PORT, &GPIO_InitStruct);
-//		
-//    GPIO_InitStruct.Pin = FLASH_SPI_MOSI_PIN;
-//    GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-//    GPIO_InitStruct.Alternate = GPIO_AFx_SPIx;
-//    HAL_GPIO_Init(FLASH_SPI_MOSI_PORT, &GPIO_InitStruct);
-//				
-//    HAL_GPIO_WritePin(FLASH_SPI_CS_PORT, FLASH_SPI_CS_PIN, GPIO_PIN_SET);		
-//    GPIO_InitStruct.Pin = FLASH_SPI_CS_PIN;
-//    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-//    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;		
-//    HAL_GPIO_Init(FLASH_SPI_CS_PORT, &GPIO_InitStruct);
-//  }
-//}
+    GPIO_InitStruct.Pin = FLASH_SPI_MISO_PIN;
+    GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+		GPIO_InitStruct.Pull = GPIO_PULLUP;
+    GPIO_InitStruct.Alternate = GPIO_AFx_SPIx;
+    HAL_GPIO_Init(FLASH_SPI_MISO_PORT, &GPIO_InitStruct);
+		
+    GPIO_InitStruct.Pin = FLASH_SPI_MOSI_PIN;
+    GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+    GPIO_InitStruct.Alternate = GPIO_AFx_SPIx;
+    HAL_GPIO_Init(FLASH_SPI_MOSI_PORT, &GPIO_InitStruct);
+				
+    HAL_GPIO_WritePin(FLASH_SPI_CS_PORT, FLASH_SPI_CS_PIN, GPIO_PIN_SET);		
+    GPIO_InitStruct.Pin = FLASH_SPI_CS_PIN;
+    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;		
+    HAL_GPIO_Init(FLASH_SPI_CS_PORT, &GPIO_InitStruct);
+  }
+}
 
 /*******************************************************************************
 * Function Name  : WR_CMD

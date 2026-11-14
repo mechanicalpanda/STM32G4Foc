@@ -366,22 +366,27 @@ void APPL_OutputMapping(UINT16* pData)
 void APPL_Application(void)
 {
   
-	if(sDOOutputs.bLED1){
-			HAL_GPIO_WritePin(GPIOB, GPIO_PIN_11, GPIO_PIN_SET);
+	if(sDOOutputs.bLED1)
+	{
+			HAL_GPIO_WritePin(GPIOE, GPIO_PIN_0, GPIO_PIN_SET);
 	}
-	else {
-		HAL_GPIO_WritePin(GPIOB, GPIO_PIN_11, GPIO_PIN_RESET);
+	else
+  {
+		HAL_GPIO_WritePin(GPIOE, GPIO_PIN_0, GPIO_PIN_RESET);
 	}
-	if(sDOOutputs.bLED2){
-			HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_SET);
+	
+	if(sDOOutputs.bLED2)
+	{
+			HAL_GPIO_WritePin(GPIOE, GPIO_PIN_1, GPIO_PIN_SET);
 	}
-	else {
-		HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_RESET);
+	else 
+	{
+		HAL_GPIO_WritePin(GPIOE, GPIO_PIN_1, GPIO_PIN_RESET);
 	}	
 
-	sDIInputs.bSwitch1    = HAL_GPIO_ReadPin(GPIOE,GPIO_PIN_2);
-	sDIInputs.bSwitch2    = HAL_GPIO_ReadPin(GPIOE,GPIO_PIN_3);
-	sDIInputs.bSwitch3    = HAL_GPIO_ReadPin(GPIOE,GPIO_PIN_4);
+	sDIInputs.bSwitch1    = HAL_GPIO_ReadPin(GPIOE,GPIO_PIN_12);
+	sDIInputs.bSwitch2    = HAL_GPIO_ReadPin(GPIOE,GPIO_PIN_13);
+	sDIInputs.bSwitch3    = HAL_GPIO_ReadPin(GPIOE,GPIO_PIN_14);
 
 }
 

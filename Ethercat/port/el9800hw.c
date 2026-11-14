@@ -61,6 +61,7 @@ V4.00 APPL 4: The EEPROM access through the ESC is added
 ------
 --------------------------------------------------------------------------------------*/
 #include "ecat_def.h"
+
 #if EL9800_HW
 #include "bsp_spiflash.h"
 #include "bsp_gpio.h"
@@ -69,7 +70,7 @@ V4.00 APPL 4: The EEPROM access through the ESC is added
 #include "main.h"
 #include "ecatslv.h"
 
-#define    _EL9800HW_ 1
+#define   _EL9800HW_ 1
 #include "el9800hw.h"
 #undef    _EL9800HW_
 /* ECATCHANGE_START(V5.11) ECAT10*/
@@ -103,32 +104,30 @@ UALEVENT;
 ------    SPI defines/macros
 ------
 -----------------------------------------------------------------------------------------*/
-#define SPI_DEACTIVE                    1
-#define SPI_ACTIVE                        0
+#define    SPI_DEACTIVE                      1
+#define    SPI_ACTIVE                        0
 
-#if INTERRUPTS_SUPPORTED
+#if        INTERRUPTS_SUPPORTED
 /*-----------------------------------------------------------------------------------------
 ------
 ------    Global Interrupt setting
 ------
 -----------------------------------------------------------------------------------------*/
 
-#define DISABLE_GLOBAL_INT           		   __disable_irq()			
-#define ENABLE_GLOBAL_INT           		    __enable_irq()				
+#define    DISABLE_GLOBAL_INT             __disable_irq()			
+#define    ENABLE_GLOBAL_INT           		__enable_irq()				
 #define    DISABLE_AL_EVENT_INT           DISABLE_GLOBAL_INT
 #define    ENABLE_AL_EVENT_INT            ENABLE_GLOBAL_INT
-
-
 
 /*-----------------------------------------------------------------------------------------
 ------
 ------    ESC Interrupt
 ------
 -----------------------------------------------------------------------------------------*/
-#if AL_EVENT_ENABLED
-#define    INIT_ESC_INT           EXTI0_Configuration();	//PD4		
-#define    EcatIsr                EXTI0_IRQHandler
-#define    ACK_ESC_INT         		__HAL_GPIO_EXTI_CLEAR_IT(GPIO_PIN_0);
+#if        AL_EVENT_ENABLED
+#define    INIT_ESC_INT           				EXTI8_Configuration();	//PE8
+#define    EcatIsr                				EXTI8_IRQHandler
+#define    ACK_ESC_INT         						__HAL_GPIO_EXTI_CLEAR_IT(GPIO_PIN_8);
 
 #endif //#if AL_EVENT_ENABLED
 
@@ -137,20 +136,18 @@ UALEVENT;
 ------    SYNC0 Interrupt
 ------
 -----------------------------------------------------------------------------------------*/
-#if DC_SUPPORTED && _STM32_IO8
-#define    INIT_SYNC0_INT                  EXTI3_Configuration();	//PE14
+#if        DC_SUPPORTED && _STM32_IO8
 
-#define    DISABLE_SYNC0_INT             NVIC_DisableIRQ(EXTI3_IRQn);	  // {(_INT3IE)=0;}//disable interrupt source INT3
-#define    ENABLE_SYNC0_INT               NVIC_EnableIRQ(EXTI3_IRQn);	// {(_INT3IE) = 1;} //enable interrupt source INT3
-#define    ACK_SYNC0_INT                  __HAL_GPIO_EXTI_CLEAR_IT(GPIO_PIN_3);
+#define    INIT_SYNC0_INT                 EXTI6_Configuration();	            //PC6
+#define    DISABLE_SYNC0_INT              NVIC_DisableIRQ(EXTI9_5_IRQn);      // {(_INT3IE)=0;}//disable interrupt source INT3
+#define    ENABLE_SYNC0_INT               NVIC_EnableIRQ(EXTI9_5_IRQn);	      // {(_INT3IE) = 1;} //enable interrupt source INT3
+#define    ACK_SYNC0_INT                  __HAL_GPIO_EXTI_CLEAR_IT(GPIO_PIN_6);
 
 /*ECATCHANGE_START(V5.10) HW3*/
-
-#define    INIT_SYNC1_INT                  EXTI1_Configuration(); //PE13
-
-#define    DISABLE_SYNC1_INT                 NVIC_DisableIRQ(EXTI1_IRQn);// {(_INT4IE)=0;}//disable interrupt source INT4
-#define    ENABLE_SYNC1_INT                 NVIC_EnableIRQ(EXTI1_IRQn); //{(_INT4IE) = 1;} //enable interrupt source INT4
-#define    ACK_SYNC1_INT                  	 __HAL_GPIO_EXTI_CLEAR_IT(GPIO_PIN_1);
+#define    INIT_SYNC1_INT                 EXTI7_Configuration();               //PC7
+#define    DISABLE_SYNC1_INT              NVIC_DisableIRQ(EXTI9_5_IRQn);       // {(_INT4IE)=0;}//disable interrupt source INT4
+#define    ENABLE_SYNC1_INT               NVIC_EnableIRQ(EXTI9_5_IRQn);        //{(_INT4IE) = 1;} //enable interrupt source INT4
+#define    ACK_SYNC1_INT                  __HAL_GPIO_EXTI_CLEAR_IT(GPIO_PIN_7);
 
 /*ECATCHANGE_END(V5.10) HW3*/
 
@@ -162,26 +159,23 @@ UALEVENT;
 ------    Hardware timer
 ------
 -----------------------------------------------------------------------------------------*/
-#if _STM32_IO8
-#if ECAT_TIMER_INT
-#define ECAT_TIMER_INT_STATE       
-#define ECAT_TIMER_ACK_INT        		 	__HAL_TIM_CLEAR_IT(&htimx , TIM_IT_UPDATE);	
-#define    TimerIsr                    	TIM2_IRQHandler //	SysTick_Handler//						
-#define    ENABLE_ECAT_TIMER_INT        NVIC_EnableIRQ(TIM2_IRQn) ;	//SysTick->CTRL |= SysTick_CTRL_TICKINT_Msk;//NVIC_EnableIRQ(TIM2_IRQn) ;	
-#define    DISABLE_ECAT_TIMER_INT       NVIC_DisableIRQ(TIM2_IRQn) ;//SysTick->CTRL &= ~SysTick_CTRL_TICKINT_Msk;//NVIC_DisableIRQ(SysTick_IRQn/*TIM2_IRQn*/) ;
+#if        _STM32_IO8
 
-#define INIT_ECAT_TIMER            TIM_Configuration(10) ;  // SysTick_Config(SystemCoreClock/1000);  
+#if        ECAT_TIMER_INT
+#define    ECAT_TIMER_INT_STATE       
+#define    ECAT_TIMER_ACK_INT        		__HAL_TIM_CLEAR_IT(&htimx , TIM_IT_UPDATE);	
+#define    TimerIsr                    	TIM2_IRQHandler               //SysTick_Handler//						
+#define    ENABLE_ECAT_TIMER_INT        NVIC_EnableIRQ(TIM2_IRQn);	  //SysTick->CTRL |= SysTick_CTRL_TICKINT_Msk;//NVIC_EnableIRQ(TIM2_IRQn) ;	
+#define    DISABLE_ECAT_TIMER_INT       NVIC_DisableIRQ(TIM2_IRQn);   //SysTick->CTRL &= ~SysTick_CTRL_TICKINT_Msk;//NVIC_DisableIRQ(SysTick_IRQn/*TIM2_IRQn*/) ;
 
-#define STOP_ECAT_TIMER            DISABLE_ECAT_TIMER_INT;/*disable timer interrupt*/ \
-
-#define START_ECAT_TIMER           ENABLE_ECAT_TIMER_INT
-
-
+#define    INIT_ECAT_TIMER              TIM_Configuration(10) ;       //SysTick_Config(SystemCoreClock/1000);  
+#define    STOP_ECAT_TIMER              DISABLE_ECAT_TIMER_INT;       /*disable timer interrupt*/
+#define    START_ECAT_TIMER             ENABLE_ECAT_TIMER_INT
 #else    //#if ECAT_TIMER_INT
 
-#define INIT_ECAT_TIMER      					TIM_Configuration(10) //SysTick_Config(SystemCoreClock/1000);//          {(PR7) = 2000;/*set period*/ \
+#define INIT_ECAT_TIMER      					TIM_Configuration(10) //SysTick_Config(SystemCoreClock/1000);//          {(PR7) = 2000;/*set period*/
 
-#define STOP_ECAT_TIMER              TIM_Cmd(TIM2, DISABLE);	// SysTick->CTRL  &=  ~SysTick_CTRL_ENABLE_Msk;      //			 
+#define STOP_ECAT_TIMER               TIM_Cmd(TIM2, DISABLE);	// SysTick->CTRL  &=  ~SysTick_CTRL_ENABLE_Msk;      //			 
 
 #define START_ECAT_TIMER              TIM_Cmd(TIM2, ENABLE);// SysTick->CTRL  |=  SysTick_CTRL_ENABLE_Msk;      			
 
@@ -215,7 +209,6 @@ UALEVENT;
 ------
 -----------------------------------------------------------------------------------------*/
 #if _STM32_IO8
-// EtherCAT Status LEDs -> StateMachine
 #define LED_ECATGREEN               
 #define LED_ECATRED                   
 #endif //_STM32_IO8
@@ -233,7 +226,49 @@ UALEVENT         EscALEvent;            //contains the content of the ALEvent re
 ------    internal functions
 ------
 --------------------------------------------------------------------------------------*/
+#define BYTE_TEST_ADDR   0x0064U
+#define BYTE_TEST_VALUE  0x87654321UL
+#define BYTE_TEST_COUNT  1000U
 
+volatile uint32_t byte_test_value = 0;
+volatile uint32_t byte_test_first_error = 0;
+volatile uint32_t byte_test_completed = 0;
+volatile uint32_t byte_test_errors = 0;
+volatile HAL_StatusTypeDef byte_test_status = HAL_BUSY;
+
+HAL_StatusTypeDef LAN9252_ByteTest(void)
+{
+    uint32_t value;
+
+   
+    byte_test_first_error = 0U;
+    byte_test_completed = 0U;
+    byte_test_errors = 0U;
+    byte_test_status = HAL_BUSY;
+
+    for (uint32_t i = 0U; i < BYTE_TEST_COUNT; i++)
+    {
+        value = SPIReadDWord(BYTE_TEST_ADDR);
+        byte_test_value = value;
+
+        if (value != BYTE_TEST_VALUE)
+        {
+            if (byte_test_errors == 0U)
+            {
+                byte_test_first_error = value;
+            }
+
+            byte_test_errors++;
+        }
+
+        byte_test_completed++;
+    }
+
+    byte_test_status =
+        (byte_test_errors == 0U) ? HAL_OK : HAL_ERROR;
+
+    return byte_test_status;
+}
 
 /////////////////////////////////////////////////////////////////////////////////////////
 /**
@@ -281,7 +316,7 @@ static void ISR_GetInterruptRegister(void)
     /* select the SPI */
     SELECT_SPI;
 
-		 HW_EscReadIsr((MEM_ADDR *)&EscALEvent.Word, 0x220, 2);
+		HW_EscReadIsr((MEM_ADDR *)&EscALEvent.Word, 0x220, 2);
 
   /* if the SPI transmission rate is higher than 15 MBaud, the Busy detection shall be
        done here */
@@ -294,19 +329,19 @@ static void ISR_GetInterruptRegister(void)
 
 void GPIO_Config(void) 
 { 
-   /* 定义IO硬件初始化结构体变量 */
+   /* 瀹氫箟IO纭欢鍒濆鍖栫粨鏋勪綋鍙橀噺 */
   GPIO_InitTypeDef GPIO_InitStruct;
 	
   __HAL_RCC_GPIOA_CLK_ENABLE();	
   __HAL_RCC_GPIOE_CLK_ENABLE();	
   __HAL_RCC_GPIOB_CLK_ENABLE();	
 	
-  GPIO_InitStruct.Pin = GPIO_PIN_11|GPIO_PIN_12;
+  GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_1;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;	
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);   
+  HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);   
 	
-  GPIO_InitStruct.Pin = GPIO_PIN_2|GPIO_PIN_3|GPIO_PIN_4|GPIO_PIN_5;
+  GPIO_InitStruct.Pin = GPIO_PIN_2|GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_14;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_PULLUP;	
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;	
@@ -320,50 +355,47 @@ void GPIO_Config(void)
 
 UINT8 HW_Init(void)
 {
-    UINT16 intMask;
-	UINT32 data;
-  /* 复位所有外设，初始化Flash接口和系统滴答定时器 */
-  HAL_Init();
-  
-  /* 配置系统时钟 */
-  SystemClock_Config();
 	
-	GPIO_Config();
-		/* initialize the SSP registers for the ESC SPI */
-	MX_SPIFlash_Init();	
-	
-	MX_DEBUG_USART_Init();
-	
-	RST_Configuration();
-	
-	printf("EtherCAT测试\n");
+		UINT16 intMask;
+		UINT32 data;
+		/* 澶嶄綅鎵�鏈夊璁撅紝鍒濆鍖朏lash鎺ュ彛鍜岀郴缁熸淮绛斿畾鏃跺櫒 */
+		HAL_Init();
 
-  RST_ESC;
-	
-	HAL_Delay(100);
-	
-	RST_ESCEND;
-	///延时，防止9252未复位好
-//	for(i = 0; i < 1000000; i++)
-//	{
-//		__nop();__nop();
-//		__nop();__nop();
-//		__nop();__nop();
-//		__nop();__nop();
-//		__nop();__nop();
-//	}
-	HAL_Delay(100);
-	
-	mem_test();// 测试PDI接口
+		/* 閰嶇疆绯荤粺鏃堕挓 */
+		//SystemClock_Config();
 
+		GPIO_Config();
+			/* initialize the SSP registers for the ESC SPI */
+		MX_SPIFlash_Init();	
 
-	do
-  {
-    	intMask = 0x0093;
-			HW_EscWriteDWord(intMask, ESC_AL_EVENTMASK_OFFSET);
-			intMask = 0;
-			HW_EscReadDWord(intMask, ESC_AL_EVENTMASK_OFFSET);
-	} while (intMask!= 0x0093);
+		MX_DEBUG_USART_Init();
+
+		RST_Configuration();
+
+		printf("EtherCAT娴嬭瘯\n");
+
+		RST_ESC;
+
+		HAL_Delay(100);
+
+		RST_ESCEND;
+
+		HAL_Delay(100);
+
+		mem_test();// 娴嬭瘯PDI鎺ュ彛
+		
+		if (LAN9252_ByteTest() != HAL_OK)
+		{
+				Error_Handler();
+		}
+
+		do
+		{
+				intMask = 0x0093;
+				HW_EscWriteDWord(intMask, ESC_AL_EVENTMASK_OFFSET);
+				intMask = 0;
+				HW_EscReadDWord(intMask, ESC_AL_EVENTMASK_OFFSET);
+		} while (intMask!= 0x0093);
 		
 		//IRQ enable,IRQ polarity, IRQ buffer type in Interrupt Configuration register.
     //Wrte 0x54 - 0x00000101
@@ -387,7 +419,7 @@ UINT8 HW_Init(void)
     ENABLE_ESC_INT();
 #endif
 
-#if DC_SUPPORTED&& _STM32_IO8
+#if DC_SUPPORTED && _STM32_IO8
     INIT_SYNC0_INT
     INIT_SYNC1_INT
 
@@ -404,7 +436,7 @@ UINT8 HW_Init(void)
     ENABLE_GLOBAL_INT;
 #endif
 
-   printf("ENT测试\n");
+    printf("ENT娴嬭瘯\n");
 
     return 0;
 }
@@ -448,7 +480,7 @@ UINT16 HW_GetALEventRegister(void)
 UINT16 HW_GetALEventRegister_Isr(void)
 {
      ISR_GetInterruptRegister();
-    return EscALEvent.Word;
+     return EscALEvent.Word;
 }
 #endif
 
@@ -471,8 +503,8 @@ void HW_SetLed(UINT8 RunLed,UINT8 ErrLed)
 #endif //#if UC_SET_ECAT_LED
 /////////////////////////////////////////////////////////////////////////////////////////
 /**
- \param pData        Pointer to a byte array which holds data to write or saves read data.
- \param Address     EtherCAT ASIC address ( upper limit is 0x1FFF )    for access.
+ \param pData          Pointer to a byte array which holds data to write or saves read data.
+ \param Address        EtherCAT ASIC address ( upper limit is 0x1FFF )    for access.
  \param Len            Access size in Bytes.
 
  \brief  This function operates the SPI read access to the EtherCAT ASIC.
@@ -480,10 +512,12 @@ void HW_SetLed(UINT8 RunLed,UINT8 ErrLed)
 void HW_EscRead( MEM_ADDR *pData, UINT16 Address, UINT16 Len )
 {
     /* HBu 24.01.06: if the SPI will be read by an interrupt routine too the
-                     mailbox reading may be interrupted but an interrupted
-                     reading will remain in a SPI transmission fault that will
-                     reset the internal Sync Manager status. Therefore the reading
-                     will be divided in 1-byte reads with disabled interrupt */
+			 mailbox reading may be interrupted but an interrupted
+			 reading will remain in a SPI transmission fault that will
+			 reset the internal Sync Manager status. Therefore the reading
+			 will be divided in 1-byte reads with disabled interrupt
+  	*/
+	
     UINT16 i;
     UINT8 *pTmpData = (UINT8 *)pData;
 
@@ -513,17 +547,12 @@ void HW_EscRead( MEM_ADDR *pData, UINT16 Address, UINT16 Len )
         }
 
         DISABLE_AL_EVENT_INT;
-
-       SPIReadDRegister(pTmpData,Address,i);
-				
-       ENABLE_AL_EVENT_INT;
-
+        SPIReadDRegister(pTmpData,Address,i);				
+        ENABLE_AL_EVENT_INT;
         Len -= i;
         pTmpData += i;
         Address += i;
     }
-
-
 }
 
 #if INTERRUPTS_SUPPORTED
@@ -546,13 +575,10 @@ void HW_EscReadIsr( MEM_ADDR *pData, UINT16 Address, UINT16 Len )
 
    UINT16 i;
    UINT8 *pTmpData = (UINT8 *)pData;
-
-    /* send the address and command to the ESC */
-
-    /* loop for all bytes to be read */
+   /* send the address and command to the ESC */
+   /* loop for all bytes to be read */
    while ( Len > 0 )
    {
-
         if (Address >= 0x1000)
         {
             i = Len;
@@ -576,7 +602,6 @@ void HW_EscReadIsr( MEM_ADDR *pData, UINT16 Address, UINT16 Len )
         }
 
         SPIReadDRegister(pTmpData, Address,i);
-
         Len -= i;
         pTmpData += i;
         Address += i;
@@ -628,21 +653,13 @@ void HW_EscWrite( MEM_ADDR *pData, UINT16 Address, UINT16 Len )
         DISABLE_AL_EVENT_INT;
        
         /* start transmission */
-
         SPIWriteRegister(pTmpData, Address, i);
-
-
-        ENABLE_AL_EVENT_INT;
-
-       
-   
+        ENABLE_AL_EVENT_INT;  
         /* next address */
         Len -= i;
         pTmpData += i;
         Address += i;
-
     }
-
 }
 
 #if INTERRUPTS_SUPPORTED
@@ -665,8 +682,6 @@ void HW_EscWriteIsr( MEM_ADDR *pData, UINT16 Address, UINT16 Len )
 
     UINT16 i ;
     UINT8 *pTmpData = (UINT8 *)pData;
-
-  
     /* loop for all bytes to be written */
     while ( Len )
     {
@@ -694,11 +709,7 @@ void HW_EscWriteIsr( MEM_ADDR *pData, UINT16 Address, UINT16 Len )
         }
         
        /* start transmission */
-
-
-       SPIWriteRegister(pTmpData, Address, i);
-
-       
+       SPIWriteRegister(pTmpData, Address, i);       
        /* next address */
         Len -= i;
         pTmpData += i;
@@ -744,40 +755,90 @@ void EcatIsr(void)
 
 
 
-#if DC_SUPPORTED&& _STM32_IO8
-/////////////////////////////////////////////////////////////////////////////////////////
-/**
- \brief    Interrupt service routine for the interrupts from SYNC0
-*////////////////////////////////////////////////////////////////////////////////////////
+//#if DC_SUPPORTED&& _STM32_IO8
+///////////////////////////////////////////////////////////////////////////////////////////
+///**
+// \brief    Interrupt service routine for the interrupts from SYNC0
+//*////////////////////////////////////////////////////////////////////////////////////////
+
+//void EXTI9_5_IRQHandler(void)
+//{
+//    HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_6);
+//    HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_7);
+//    HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_8);
+//}
+
+//void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+//{
+//  if(GPIO_Pin==GPIO_PIN_8)
+//  {		
+//     PDI_Isr();
+//     /* reset the interrupt flag */
+//		 //ACK_ESC_INT; 		
+//		     return;
+//	}
+//  else if(GPIO_Pin==GPIO_PIN_7)
+//  {	
+//    Sync1_Isr();
+//    /* reset the interrupt flag */
+
+//    //ACK_SYNC1_INT;		
+//		     return;
+//	}
+//  else if(GPIO_Pin==GPIO_PIN_6)
+//  {	
+//    Sync0_Isr();
+//    /* reset the interrupt flag */
+
+//    //ACK_SYNC0_INT;		
+//		     return;
+//	}	
+//}
+
+///*ECATCHANGE_END(V5.10) HW3*/
+//#endif
+
+#if INTERRUPTS_SUPPORTED && _STM32_IO8
+
+void EXTI9_5_IRQHandler(void)
+{
+#if AL_EVENT_ENABLED
+    HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_8);  // PE8锛欼NT
+#endif
+
+#if DC_SUPPORTED
+    HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_6);  // PC6锛歋YNC0
+    HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_7);  // PC7锛歋YNC1
+#endif
+}
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
-  if(GPIO_Pin==GPIO_PIN_0)
-  {		
-     PDI_Isr();
-     /* reset the interrupt flag */
-		 ACK_ESC_INT; 		
-		     return;
-	}
-  else if(GPIO_Pin==GPIO_PIN_1)
-  {	
-    Sync1_Isr();
-    /* reset the interrupt flag */
+#if AL_EVENT_ENABLED
+    if (GPIO_Pin == GPIO_PIN_8)
+    {
+        PDI_Isr();
+        return;
+    }
+#endif
 
-    ACK_SYNC1_INT;		
-		     return;
-	}
-  else if(GPIO_Pin==GPIO_PIN_3)
-  {	
-    Sync0_Isr();
-    /* reset the interrupt flag */
+#if DC_SUPPORTED
+    if (GPIO_Pin == GPIO_PIN_6)
+    {
+        Sync0_Isr();
+        return;
+    }
 
-    ACK_SYNC0_INT;		
-		     return;
-	}	
+    if (GPIO_Pin == GPIO_PIN_7)
+    {
+        Sync1_Isr();
+        return;
+    }
+#endif
+
+    (void)GPIO_Pin;
 }
 
-/*ECATCHANGE_END(V5.10) HW3*/
 #endif
 
 #if _STM32_IO8 && ECAT_TIMER_INT
