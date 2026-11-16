@@ -30,8 +30,13 @@
 #include "Lan9252.h"
 #include "Lan9252_my.h"
 #include "el9800hw.h"
-#include "el9800appl.h"
+//#include "el9800appl.h"
+
+#include "applInterface.h"
+
+
 #include "ecatappl.h"
+#include "cia402appl.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -282,9 +287,7 @@ int main(void)
 		pram_test_status = LAN9252_PRAM_SelfTest();
 	}
 #endif
-  HW_Init();
-	MainInit();	
-	bRunApplication = TRUE;
+
 
 	HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
 	HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
@@ -323,7 +326,12 @@ int main(void)
 	
 	LPF2_Init(&speed_filter, 50.0);
 	VoltageLPF_Init(&voltage_filter, 0.0f, 0.0f);
-
+  
+	HW_Init();
+	MainInit();	
+	CiA402_Init();
+  APPL_GenerateMapping(&nPdInputSize, &nPdOutputSize);
+	bRunApplication = TRUE;
 		
   /* USER CODE END 2 */
 
@@ -333,6 +341,7 @@ int main(void)
     do
     {
         MainLoop();
+			 CiA402_StateMachine();
 
     } while (bRunApplication == TRUE);
 

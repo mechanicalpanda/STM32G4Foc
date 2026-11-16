@@ -1266,6 +1266,6 @@ PROTO void APPL_OutputMapping(UINT16* pData);
 
 PROTO void CiA402_LocalError(UINT16 ErrorCode);
 PROTO void CiA402_StateMachine(void);
-
+PROTO UINT16 CiA402_Init(void);
 #undef PROTO
 /** @}*/

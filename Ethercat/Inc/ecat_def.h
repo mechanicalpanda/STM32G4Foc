@@ -193,13 +193,13 @@ Select this setting to test the slave stack or a master implementation. For furt
 /** 
 EL9800_APPLICATION: Should be set if the Slave Sample Code runs on an EL9800_x Evaluation Board. */
 #ifndef EL9800_APPLICATION
-#define EL9800_APPLICATION                        1 //This define was already evaluated by ET9300 Project Handler(V. 1.3.3.0)!
+#define EL9800_APPLICATION                        0 //This define was already evaluated by ET9300 Project Handler(V. 1.3.3.0)!
 #endif
 
 /** 
 CiA402_DEVICE: If this switch is set, then the sample implementation of CiA402 device profile will be activated. */
 #ifndef CiA402_DEVICE
-#define CiA402_DEVICE                             0 //This define was already evaluated by ET9300 Project Handler(V. 1.3.3.0)!
+#define CiA402_DEVICE                             1 //This define was already evaluated by ET9300 Project Handler(V. 1.3.3.0)!
 #endif
 
 /** 
@@ -219,7 +219,7 @@ NOTE: The file "EtherCATSampleLibrary.h" includes the library interface (maybe n
 USE_DEFAULT_MAIN: Set to 1 if the main function of a default application shall be used.<br>
 Otherwise the Init functions and the mainloop handler shall be called for a user specific function (see ET9300 Application Note for further details www.beckhoff.com/english.asp?download/ethercat_development_products.htm?id=71003127100387). */
 #ifndef USE_DEFAULT_MAIN
-#define USE_DEFAULT_MAIN                          1 //This define was already evaluated by ET9300 Project Handler(V. 1.3.3.0)!
+#define USE_DEFAULT_MAIN                          0 //This define was already evaluated by ET9300 Project Handler(V. 1.3.3.0)!
 #endif
 
 /** 

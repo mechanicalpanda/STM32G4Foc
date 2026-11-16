@@ -334,11 +334,13 @@ void APPL_InputMapping(UINT16* pData)
 \brief    This function will copies the outputs from the ESC memory to the local memory
             to the hardware
 *////////////////////////////////////////////////////////////////////////////////////////
+
 #if _STM32_IO4  && AL_EVENT_ENABLED
 /* the pragma interrupt_level is used to tell the compiler that these functions will not
    be called at the same time from the main function and the interrupt routine */
 #pragma interrupt_level 1
 #endif
+
 void APPL_OutputMapping(UINT16* pData)
 {
     UINT16 j = 0;
@@ -372,7 +374,7 @@ void APPL_Application(void)
 	}
 	else
   {
-		HAL_GPIO_WritePin(GPIOE, GPIO_PIN_0, GPIO_PIN_RESET);
+		  HAL_GPIO_WritePin(GPIOE, GPIO_PIN_0, GPIO_PIN_RESET);
 	}
 	
 	if(sDOOutputs.bLED2)

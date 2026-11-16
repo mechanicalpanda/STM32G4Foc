@@ -109,13 +109,13 @@ V4.00 ECAT 1: The handling of the Sync Manager Parameter was included according 
 /*remove definition of _COEAPPL_ (#ifdef is used in coeappl.h)*/
 /* ECATCHANGE_END(V5.11) ECAT10*/
 
+#if CiA402_DEVICE
+#include "cia402appl.h"
+#elif EL9800_APPLICATION
 #define _OBJD_
-
-/*Add Application specific Objects*/
 #include "el9800appl.h"
-
-
 #undef _OBJD_
+#endif
 /*-----------------------------------------------------------------------------------------
 ------
 ------    Backup Parameter

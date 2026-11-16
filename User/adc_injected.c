@@ -329,7 +329,7 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
     if (hadc->Instance == ADC1)
     {
 			
-			 HAL_GPIO_TogglePin(LED0_GPIO_Port,LED0_Pin);
+			 //HAL_GPIO_TogglePin(LED0_GPIO_Port,LED0_Pin);
 			
 //			 adc_raw_0[0] = (uint16_t)HAL_ADCEx_InjectedGetValue(hadc, ADC_INJECTED_RANK_1);
 //			 adc_raw_1[0] = (uint16_t)HAL_ADCEx_InjectedGetValue(hadc, ADC_INJECTED_RANK_2);
